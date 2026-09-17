@@ -296,7 +296,7 @@ Borders are always hairlines (1px). Cards prefer a `ring-1` over a `border` so t
 `/design` has effectively **no radius**: the Plate control is `rounded-[1px]`, frames and rules are square. That squareness is load-bearing — it is what makes the page read as printed rather than rendered.
 
 ### Named Rules
-**The One-Radius Rule.** Use `rounded` (10px). Reach for another step only when the element is genuinely smaller or larger than a control, and never introduce `rounded-full` on a rectangle.
+**The One-Radius Rule.** Use `rounded` (10px). Reach for another step only when the element is genuinely smaller or larger than a control, and never introduce `rounded-full` on a rectangle. The toast banner (16px) is the one deliberate exception: it quotes a system notification, not a control (see The Banner Exception).
 
 ## Components
 
@@ -309,7 +309,7 @@ Two implementations exist, and they are not interchangeable:
 - **Primary:** Signal Orange fill with near-white text, `shadow-xs`, hover at 90% opacity. Reserved for the single most important action on a surface.
 - **Outline:** bone-white fill, warm greige border (`#d8d2ca`), `#292929` text, hover fill `#f5f2ed`; in dark mode a translucent input-tinted fill with the border token. This is the workhorse — both auth forms submit through it, deliberately, so sign-in and registration read as one family rather than competing for the accent.
 - **Ghost:** no fill until hover. Header icons and toolbars.
-- **States:** focus shows a 3px `ring-ring/50` ring; disabled drops to 50% opacity and removes pointer events; loading is expressed by disabling the control and swapping the label ("Log in" → "Logging in…"), never by a spinner replacing the text.
+- **States:** focus shows a 3px `ring-ring/50` ring; disabled drops to 50% opacity and removes pointer events; loading is expressed by disabling the control and swapping the label, never by a spinner replacing the text. Forms that submit to the API — log in, register, create project — go one step further: the button only disables and keeps its label ("Log in" stays "Log in"), and the loading state is a toast that resolves in place into the outcome (see Toast).
 
 ### Cards / Containers
 - **Corner Style:** 10px (`rounded`).
@@ -335,6 +335,19 @@ Two implementations exist, and they are not interchangeable:
 - The logo sits left; search, GitHub count, account and theme toggle sit right as 25px ghost icon buttons separated by vertical rules, each with a tooltip.
 - The home page carries a vertical section-nav rail on the right edge; `/design` carries its own rail with a serif wordmark and an `01 / 05` scene counter.
 
+### Toast
+The app's one notification surface: `components/ui/global/sonner.tsx`, styled in `app/globals.css` under "Toast", and mounted once in the root layout. It is sonner running `unstyled` — the library keeps positioning, stacking and swipe-to-dismiss, and every visual is ours. It deliberately quotes an iPhone notification banner.
+
+- **Placement:** top-center, 96px down on desktop and 64px on mobile so it clears the fixed header; bottom-right belongs to MessageDock. `372px` wide from 601px up, full width minus 10px gutters below that.
+- **Material:** frosted. The page ground at 76% (`--background`, `--card` in dark) under `blur(24px) saturate(180%)`, a 0.5px hairline edge and a 0.5px top highlight, over a soft shadow with a downward offset. Where `backdrop-filter` is unsupported the ground turns solid, so the text never sits on bare page.
+- **Shape:** 16px radius, 64px minimum height.
+- **Anatomy:** a 52px icon slot on the left, where Catronaut acts the outcome out. On the right a header row, **Fiurozz** at 14px semibold with a muted *now* at its end, above the message at 14px regular. The header and *now* are CSS generated content; *now* carries an empty alt so screen readers skip it.
+- **Status:** every type is told by Catronaut, never by a coloured badge: pixel canvases in `components/ui/catronaut/` (`loading`, `success`, `error`, `warning`, `info`, sharing `toast-sprites.ts`), traced from the team's design sheets and drawn at `scale={1}` so one art pixel is one CSS pixel. Loading spins an orbit around the helmet, its back half passing behind it. Success wears `^ ^` eyes under a heart bubble that drifts up while sparkles twinkle. Error wears `x x` eyes and a sad bubble, and jolts every few seconds as the zap marks beside him flash. Warning is wide-eyed with a glint on the visor, under a warning-sign bubble that hops twice every couple of seconds. Info has curious arch eyes and an "i" bubble that floats gently among four twinkling stars. The banner itself stays neutral; the mascot's orange is the only colour in it.
+- **Motion:** enters sliding down while scaling from 0.96, 560ms on the house curve. Stacked banners collapse to their shells. There is no close button: swipe up, as on iOS, or let it time out. Reduced motion keeps only the fade.
+- **Use:** request outcomes in client components. Call `toast.loading()` when the request starts, then `toast.success()` or `toast.error()` with the same `id`, so one banner resolves in place rather than stacking a second. Field-level validation still renders beneath its field; the toast carries the request's outcome, not a list of field errors. Never `alert()`.
+
+**The Banner Exception.** Frosted material and a 16px radius are sanctioned for the toast and for nothing else. It reads as a system notification precisely because no other surface in the app looks like one — a second frosted panel would spend that signal.
+
 ### Signature component — the project artifact
 One project rendered as the page it would really get, not an illustration of one. Introduced on the home hero, and now the card every project listing uses (`components/ui/project/project-card.tsx`) — one anatomy, two instances. Three bands, separated by hairlines and read top to bottom:
 
@@ -352,7 +365,9 @@ The rule it exists to enforce: **the hero shows the product, and the product is 
 The atelier's call-to-action, ported from the original static page. Square (`1px` radius), Archivo uppercase at `0.14em` tracking, ink fill with paper text, an inset top highlight and a long soft shadow. It carries a hand-drawn nib icon that lifts and rotates `-6°` on hover while the plate itself rises 2px over 500ms on the house easing curve. Three variants: `default` (ink), `ink` (terracotta `#9C4C34`), and `large` (paper on a dark ground, `0.2em` tracking).
 
 ### Signature component — Catronaut
-The mascot ships as pixel-grid canvas components (`idle`, `happy`, `coding`) rendered at `scale` — `0.3` inside a 40px icon badge, larger when it is the subject. It is the brand's face: it appears in the home feature list, in the register card's title badge, and as the painter inside the `/design` hero plate. It is never replaced by a generic user or sparkle icon.
+The mascot ships as pixel-grid canvas components (`idle`, `happy`, `coding`, and the toast set `loading`, `success`, `error`, `warning`, `info`) rendered at `scale` — `0.3` inside a 40px icon badge, larger when it is the subject. It is the brand's face: it appears in the home feature list, in the register card's title badge, and as the painter inside the `/design` hero plate. It is never replaced by a generic user or sparkle icon.
+
+**The Sticker Rim.** Every Catronaut keeps one palette in both themes — warm inks `#0a0a09`–`#2e2f30`, helmet whites `#e8e5e0`/`#fbfaf8`, and orange `#f57626` for inner ears, badges and bubbles. The dark theme never inverts the character; it adds a 1px greige rim (`#d8d2ca`, the Greige Edge) around the silhouette so the black suit stays separate from a near-black page. Both versions are pre-rendered once by `components/ui/catronaut/sprite-canvas.ts` and picked per frame, so a theme switch applies immediately. Every Catronaut also honours `prefers-reduced-motion` by drawing a single still frame. Sprites traced from a source image must not keep its transparency checkerboard: clear it before shipping (`happy` once carried one that only showed on dark).
 
 ### Signature component — the atelier workspace
 `/design/[projectId]` (`views/Workspace.tsx`) is where "Start designing" lands — a file tree, tabs, a code pane and a chat, in the same ivory-and-ink world as the landing page rather than the application's own chrome. It is the atelier's one Operate-mode surface: the world stays fixed, but the grammar bends to a working tool — mono for anything that is a filename or code, hairline-bordered `1px`-radius panels instead of the landing page's plates, and a calmer, UI-scale motion register (`duration-300`, still the house ease) in place of the page's staged reveals.
@@ -385,7 +400,7 @@ One curve carries the whole product: `cubic-bezier(0.16, 1, 0.3, 1)`, an exponen
 - **Do** reserve the header's height on every new page (`pt-14 md:pt-[82px]`, or `pt-20 md:pt-28` on centred single-card pages).
 - **Do** start multi-column form rows at one column (`grid-cols-1 sm:grid-cols-2`).
 - **Do** wrap fields in a real `<form>` with `onSubmit`, `id`/`htmlFor` pairs, `autoComplete`, and `aria-invalid` on failed fields — Enter must submit.
-- **Do** ship every interactive state: hover, focus ring, disabled, loading (label swap), error, empty.
+- **Do** ship every interactive state: hover, focus ring, disabled, loading (label swap; for API-backed forms, a disabled button plus a resolving toast), error, empty.
 - **Do** use the authored assets — the Catronaut components, the painted plate, the desk photograph — where a generic icon or stock image would otherwise land.
 - **Do** honour `prefers-reduced-motion`, as `/design` already does, before adding any scroll-driven or pinned animation.
 - **Do** theme the browser's own surfaces: selection colour, focus ring, scrollbar (`thin-scrollbar` / `no-scrollbar`), caret.
@@ -395,7 +410,7 @@ One curve carries the whole product: `cubic-bezier(0.16, 1, 0.3, 1)`, an exponen
 ### Don't:
 - **Don't** blend the worlds — no ivory paper, Garamond or terracotta inside the application, and no orange accent, 10px radius or Lexend Deca inside `/design`.
 - **Don't** reintroduce the disconnected space theme. The star field, nebula blobs, Saturn and satellite art were removed from the auth pages on purpose; the celestial motif lives in the Catronaut mascot and the home page's planet, not in a decorative background layer.
-- **Don't** use gradient text, or glass and backdrop blur as decoration. Emphasis comes from weight, size and colour; blur is for a specific effect, not atmosphere.
+- **Don't** use gradient text, or glass and backdrop blur as decoration. Emphasis comes from weight, size and colour; blur is for a specific effect, not atmosphere. The toast banner's frosted material is that specific effect, and the only one (see The Banner Exception).
 - **Don't** substitute emoji or unicode glyphs for icons. Icons come from `lucide-react` or authored SVG at a consistent stroke weight.
 - **Don't** hard-code `#ffa951` or `#bb2233`; that silently breaks the other theme.
 - **Don't** reach for a Lexend Deca weight outside the loaded 200/300/400/500/600/700, or use `font-mono` as a "technical" flavour on ordinary text.

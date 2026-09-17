@@ -328,6 +328,14 @@
       "description": "/design only. The rule-topped caption under a framed plate: number, italic title, and specification.",
       "html": "<figcaption class=\"ds-plate-caption\"><span class=\"ds-plate-no\">Plate&nbsp;I</span><span class=\"ds-plate-title\"><i>Fields under construction</i></span><span class=\"ds-plate-spec\">16:9 &middot; centred &middot; ivory ground</span></figcaption>",
       "css": ".ds-plate-caption { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4em 1.4em; padding-top: 0.8rem; border-top: 1px solid rgba(43,58,74,0.16); font-family: 'Courier Prime', ui-monospace, monospace; font-size: 0.79rem; text-transform: uppercase; letter-spacing: 0.1em; color: #4E5E6C; } .ds-plate-no { color: #2B3A4A; } .ds-plate-title { font-family: 'EB Garamond', Georgia, serif; font-size: 0.9rem; text-transform: none; letter-spacing: 0.02em; } .ds-plate-spec { margin-left: auto; }"
+    },
+    {
+      "name": "Toast Banner",
+      "kind": "notification",
+      "refersTo": "toast-banner",
+      "description": "The app's only notification surface, quoting an iPhone banner: frosted ground, 16px radius, the Fiurozz mark as the app icon, a \"Fiurozz · now\" header over the message, and Catronaut acting out every state (loading, success, error, warning, info) in the icon slot. Loading resolves in place into success or error.",
+      "html": "<div class=\"ds-toast\"><span class=\"ds-toast-icon\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"6\"/></svg></span><span class=\"ds-toast-content\"><span class=\"ds-toast-head\"><strong>Fiurozz</strong><span>now</span></span><span class=\"ds-toast-title\">Draft created. Review it, then publish when you are ready.</span></span></div>",
+      "css": ".ds-toast { display: flex; align-items: center; gap: 12px; box-sizing: border-box; width: 372px; max-width: 100%; min-height: 64px; padding: 11px 14px 11px 11px; border-radius: 16px; background: rgb(252 252 251 / 0.76); -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%); box-shadow: inset 0 0.5px 0 rgb(255 255 255 / 0.6), 0 0 0 0.5px rgb(37 37 37 / 0.09), 0 14px 34px -16px rgb(30 25 20 / 0.3), 0 3px 10px -4px rgb(30 25 20 / 0.1); color: #252525; font-family: \"Lexend Deca\", system-ui, sans-serif; } .ds-toast-icon { position: relative; display: grid; place-items: center; flex: none; width: 38px; height: 38px; border-radius: 9px; background: #ffa951; color: #fff; } .ds-toast-icon > svg { width: 22px; height: 22px; } .ds-toast-content { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; } .ds-toast-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; line-height: 1.3; } .ds-toast-head strong { font-weight: 600; letter-spacing: -0.01em; } .ds-toast-head span { font-size: 12px; color: #737373; } .ds-toast-title { font-size: 14px; line-height: 1.35; }"
     }
   ],
   "narrative": {
@@ -410,7 +418,7 @@
       "Do reserve the header's height on every new page (pt-14 md:pt-[82px], or pt-20 md:pt-28 on centred single-card pages).",
       "Do start multi-column form rows at one column (grid-cols-1 sm:grid-cols-2).",
       "Do wrap fields in a real <form> with onSubmit, id/htmlFor pairs, autoComplete, and aria-invalid on failed fields — Enter must submit.",
-      "Do ship every interactive state: hover, focus ring, disabled, loading (label swap), error, empty.",
+      "Do ship every interactive state: hover, focus ring, disabled, loading (label swap; for API-backed forms, a disabled button plus a resolving toast), error, empty.",
       "Do use the authored assets — the Catronaut components, the painted plate, the desk photograph — where a generic icon or stock image would otherwise land.",
       "Do honour prefers-reduced-motion, as /design already does, before adding any scroll-driven or pinned animation.",
       "Do theme the browser's own surfaces: selection colour, focus ring, scrollbar (thin-scrollbar / no-scrollbar), caret.",
@@ -420,7 +428,7 @@
     "donts": [
       "Don't blend the worlds — no ivory paper, Garamond or terracotta inside the application, and no orange accent, 10px radius or Lexend Deca inside /design.",
       "Don't reintroduce the disconnected space theme. The star field, nebula blobs, Saturn and satellite art were removed from the auth pages on purpose; the celestial motif lives in the Catronaut mascot and the home page's planet, not in a decorative background layer.",
-      "Don't use gradient text, or glass and backdrop blur as decoration. Emphasis comes from weight, size and colour; blur is for a specific effect, not atmosphere.",
+      "Don't use gradient text, or glass and backdrop blur as decoration. Emphasis comes from weight, size and colour; blur is for a specific effect, not atmosphere. The toast banner's frosted material is that specific effect, and the only one (see The Banner Exception).",
       "Don't substitute emoji or unicode glyphs for icons. Icons come from lucide-react or authored SVG at a consistent stroke weight.",
       "Don't hard-code #ffa951 or #bb2233; that silently breaks the other theme.",
       "Don't reach for a Lexend Deca weight outside the loaded 200/300/400/500/600/700, or use font-mono as a \"technical\" flavour on ordinary text.",
