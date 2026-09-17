@@ -8,6 +8,7 @@ import { LucideIcon, LogOut, User, Users, FolderKanban, Newspaper, Mail, LayoutG
 import { useUserStore } from '@/lib/store/user-store';
 import { RadialMenu } from '@/components/animate-ui/components/community/radial-menu';
 import { authService } from '@/services/auth-service';
+import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 
@@ -48,7 +49,7 @@ export function FloatingMenuBubble({ className = 'md:hidden' }: FloatingMenuBubb
 
     const handleLogout = async () => {
         const res = await authService.logout();
-        if (!res.success) alert('logout failed');
+        if (!res.success) toast.error('Logout failed.');
         clearUser();
         router.push('/login');
         router.refresh();

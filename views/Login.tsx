@@ -13,6 +13,7 @@ import { z } from 'zod';
 import { authService } from '@/services/auth-service';
 import { ApiEnvelope } from '@/services/api-core';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import Google from '@/components/icons/google';
 import OauthLogin from '@/components/ui/global/oauth-login';
 import Image from 'next/image';
@@ -63,14 +64,18 @@ export default function LoginForm() {
         }
 
         setIsSubmitting(true);
+        // The button just stays disabled (no label swap); the loading state itself is
+        // this toast, which then resolves in place into the success or error toast.
+        const toastId = toast.loading('Logging you in…');
         const result: ApiEnvelope<null> = await authService.login(parsed.data);
         setIsSubmitting(false);
 
         if (!result.success) {
-            alert(result.message);
+            toast.error(result.message || 'Could not log you in. Check your email and password.', { id: toastId });
             return;
         }
 
+        toast.success('Welcome back!', { id: toastId });
         router.push('/home');
     };
 
@@ -168,7 +173,7 @@ export default function LoginForm() {
                                 className="w-full cursor-pointer"
                                 variant="outline"
                             >
-                                {isSubmitting ? 'Logging in…' : 'Log in'}
+                                Log in
                             </Button>
                         </form>
 

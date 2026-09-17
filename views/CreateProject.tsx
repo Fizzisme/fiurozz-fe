@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { FolderPlus, Globe, Layers, Shapes } from 'lucide-react';
 
 import { Button } from '@/components/animate-ui/components/buttons/button';
@@ -84,7 +85,6 @@ export default function CreateProject({ categories }: { categories: ProjectCateg
 
     const [formData, setFormData] = React.useState<ProjectFormData>(EMPTY_PROJECT_FORM);
     const [errors, setErrors] = React.useState<ProjectFormErrors>({});
-    const [submitError, setSubmitError] = React.useState('');
     const [isSubmitting, setIsSubmitting] = React.useState(false);
 
     const subCategories = categories.find((category) => category.id === formData.categoryId)?.subCategories ?? [];
@@ -103,7 +103,6 @@ export default function CreateProject({ categories }: { categories: ProjectCateg
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setSubmitError('');
 
         const parsed = projectFormSchema.safeParse(formData);
         if (!parsed.success) {
@@ -112,6 +111,9 @@ export default function CreateProject({ categories }: { categories: ProjectCateg
         }
 
         setIsSubmitting(true);
+        // The button just stays disabled (no label swap); the loading state itself is
+        // this toast, which then resolves in place into the success or error toast.
+        const toastId = toast.loading('Creating your draft…');
         const result = await projectService.createProject(toCreateProjectPayload(parsed.data));
         setIsSubmitting(false);
 
@@ -119,15 +121,17 @@ export default function CreateProject({ categories }: { categories: ProjectCateg
             // BE validation messages come back per field and land under the matching input.
             const serverErrors = getServerFieldErrors((result as { errors?: unknown }).errors);
             setErrors(serverErrors);
-            setSubmitError(
+            toast.error(
                 Object.keys(serverErrors).length > 0
                     ? 'Some fields need attention.'
-                    : (result.message ?? 'Could not create the project'),
+                    : result.message || 'Could not create the project.',
+                { id: toastId },
             );
             return;
         }
 
         // New projects start as drafts: review them, then publish from the preview.
+        toast.success('Draft created. Review it, then publish when you are ready.', { id: toastId });
         router.push(`/projects/preview/${result.data.id}`);
     };
 
@@ -443,18 +447,12 @@ export default function CreateProject({ categories }: { categories: ProjectCateg
                 {/* ============================================================ */}
 
                 <div className="space-y-3">
-                    {submitError && (
-                        <p role="alert" className="text-sm text-destructive">
-                            {submitError}
-                        </p>
-                    )}
-
                     <p className="text-sm text-muted-foreground">
                         The project is saved as a draft. You choose who can see it when you publish.
                     </p>
 
                     <Button type="submit" variant="outline" disabled={isSubmitting} className="w-full cursor-pointer">
-                        {isSubmitting ? 'Creating draft…' : 'Create draft'}
+                        Create draft
                     </Button>
                 </div>
             </form>

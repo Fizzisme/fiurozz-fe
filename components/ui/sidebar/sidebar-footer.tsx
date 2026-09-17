@@ -27,6 +27,7 @@ import { User } from '@/components/animate-ui/icons/user';
 import { Settings } from '@/components/animate-ui/icons/settings';
 import { useUserStore } from '@/lib/store/user-store';
 import { authService } from '@/services/auth-service';
+import { toast } from 'sonner';
 import LogoIcon from '@/components/icons/logo-icon';
 import { useIsMobile } from '@/hooks/use-mobile';
 import CatronautCoding from '@/components/ui/catronaut/coding';
@@ -78,7 +79,7 @@ export default function SidebarFooter() {
     const handleLogout = async () => {
         const res = await authService.logout();
         if (!res.success) {
-            alert('Logout failed');
+            toast.error('Could not log out. Please try again.');
             return;
         }
         clearUser();
