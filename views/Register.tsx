@@ -17,6 +17,7 @@ import { Calendar } from '@/components/ui/global/calendar';
 import { z } from 'zod';
 import { ApiEnvelope } from '@/services/client';
 import { authService } from '@/services/auth-service';
+import { toast } from 'sonner';
 import Github from '@/components/icons/github';
 import OauthLogin from '@/components/ui/global/oauth-login';
 import Google from '@/components/icons/google';
@@ -101,15 +102,18 @@ export default function Register({ countries }: { countries: string[] }) {
         const { confirmPassword, ...payload } = parsed.data;
 
         setIsSubmitting(true);
+        // The button just stays disabled (no label swap); the loading state itself is
+        // this toast, which then resolves in place into the success or error toast.
+        const toastId = toast.loading('Creating your account…');
         const result: ApiEnvelope<null> = await authService.register(payload);
         setIsSubmitting(false);
 
         if (!result.success) {
-            alert(result.message);
+            toast.error(result.message || 'Could not create your account.', { id: toastId });
             return;
         }
 
-        alert(result.message);
+        toast.success(result.message || 'Account created. You can log in now.', { id: toastId });
         setFormData({
             fullName: '',
             displayName: '',
@@ -426,7 +430,7 @@ export default function Register({ countries }: { countries: string[] }) {
                             className="w-full cursor-pointer"
                             variant="outline"
                         >
-                            {isSubmitting ? 'Creating account…' : 'Register'}
+                            Register
                         </Button>
                     </div>
                 </form>

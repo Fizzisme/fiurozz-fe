@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/global/avat
 import { getInitials } from '@/lib/utils';
 import { useUserStore } from '@/lib/store/user-store';
 import { authService } from '@/services/auth-service';
+import { toast } from 'sonner';
 import { User } from '@/components/animate-ui/icons/user';
 import { AnimateIcon } from '@/components/animate-ui/icons/icon';
 import { LogOut } from '@/components/animate-ui/icons/log-out';
@@ -29,7 +30,7 @@ export function UserMenu() {
 
     const handleLogout = async () => {
         const res = await authService.logout();
-        if (!res.success) alert('logout failed');
+        if (!res.success) toast.error('Logout failed.');
         clearUser();
         router.push('/login');
         router.refresh();

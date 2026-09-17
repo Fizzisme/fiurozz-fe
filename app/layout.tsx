@@ -7,6 +7,7 @@ import MessageDock from '@/components/ui/messages/message-dock';
 import { userService } from '@/services/user-service';
 import { AuthHydrator } from '@/components/auth-hydrator';
 import { ThemeProvider } from '@/components/ui/global/theme-provider';
+import { Toaster } from '@/components/ui/global/sonner';
 import {baseUrl} from "@/lib/constanst";
 
 
@@ -122,6 +123,7 @@ export default async function RootLayout({
             <RouteProgressBar />
             {children}
             <MessageDock />
+            <Toaster />
         </ThemeProvider>
         </body>
         </html>
