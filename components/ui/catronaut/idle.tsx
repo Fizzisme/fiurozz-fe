@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 
+import { isDarkTheme, prefersReducedMotion, themedSprite } from '@/components/ui/catronaut/sprite-canvas';
+
 const GRID: number[][] = [
     [
         0,
@@ -20807,18 +20809,13 @@ const GRID: number[][] = [
 const W = 128;
 const H = 160;
 
-const LIGHT_PALETTE: Record<number, string | null> = {
+// Same palette in both themes (the toast set's warm inks and whites). The dark theme adds a
+// greige rim around the silhouette instead of inverting the character.
+const PALETTE: Record<number, string | null> = {
     0: null,
-    1: '#f5f3ee',
-    2: '#141414',
-    3: '#cdcbc6',
-};
-
-const DARK_PALETTE: Record<number, string | null> = {
-    0: null,
-    1: '#292929',
-    2: '#e7e5df',
-    3: '#77746f',
+    1: '#e8e5e0',
+    2: '#1b1c1c',
+    3: '#c3bdb6',
 };
 
 const SHADOW = { cx: 73.5, cy: 152.5, rx: 20, ry: 3.2 };
@@ -20834,68 +20831,41 @@ export default function CatronautIdle({ scale = 3, className }: PixelPetProps) {
 
     useEffect(() => {
         const canvas = canvasRef.current;
-
         if (!canvas) return;
-
         const ctx = canvas.getContext('2d');
-
         if (!ctx) return;
-
         ctx.imageSmoothingEnabled = false;
 
-        const drawCharacter = () => {
-            const isDark = document.documentElement.classList.contains('dark');
-
-            const palette = isDark ? DARK_PALETTE : LIGHT_PALETTE;
-
-            for (let y = 0; y < H; y++) {
-                for (let x = 0; x < W; x++) {
-                    const v = GRID[y][x];
-                    const color = palette[v];
-
-                    if (!color) continue;
-
-                    ctx.fillStyle = color;
-                    ctx.fillRect(x, y, 1, 1);
-                }
-            }
-        };
+        const sprite = themedSprite(GRID, PALETTE);
+        const reduced = prefersReducedMotion();
+        const AMPLITUDE = 3;
 
         const drawShadow = (scaleFactor: number) => {
-            ctx.fillStyle = document.documentElement.classList.contains('dark')
-                ? 'rgba(0,0,0,0.35)'
-                : 'rgba(20,20,20,0.16)';
-
+            ctx.fillStyle = isDarkTheme() ? 'rgba(0,0,0,0.35)' : 'rgba(20,20,20,0.16)';
             ctx.beginPath();
-
             ctx.ellipse(SHADOW.cx, SHADOW.cy, SHADOW.rx * scaleFactor, SHADOW.ry * scaleFactor, 0, 0, Math.PI * 2);
-
             ctx.fill();
         };
 
         let t = 0;
 
-        const AMPLITUDE = 3;
-
-        const frame = () => {
-            t += 0.045;
-
-            const bob = Math.round(Math.sin(t) * AMPLITUDE);
-
+        const render = () => {
+            const bob = reduced ? 0 : Math.round(Math.sin(t) * AMPLITUDE);
             const shadowScale = 1 + (bob / AMPLITUDE) * 0.22;
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-
             drawShadow(shadowScale);
+            ctx.drawImage(isDarkTheme() ? sprite.dark : sprite.light, 0, bob);
+        };
 
-            ctx.save();
+        if (reduced) {
+            render();
+            return;
+        }
 
-            ctx.translate(0, bob);
-
-            drawCharacter();
-
-            ctx.restore();
-
+        const frame = () => {
+            t += 0.045;
+            render();
             rafRef.current = requestAnimationFrame(frame);
         };
 

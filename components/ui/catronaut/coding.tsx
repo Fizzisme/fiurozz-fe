@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from 'react';
 
+import { isDarkTheme, prefersReducedMotion, themedSprite } from '@/components/ui/catronaut/sprite-canvas';
+
 const MAIN_GRID: number[][] = [
     [
         0,
@@ -9445,17 +9447,17 @@ const HEART_GRID: number[][] = [
 ];
 
 const G = 96;
-const HW = 25;
-const HH = 28;
 const HX0 = 72;
 const HY0 = 7;
 
+// The toast set's warm palette; the heart is the same orange as the toast bubbles. Same
+// colours in both themes — the dark theme adds a greige rim around the cat instead.
 const PALETTE: Record<number, string | null> = {
     0: null,
-    1: '#141414',
-    2: '#ebe5de',
-    3: '#6e6e70',
-    4: '#eb9669',
+    1: '#1b1c1c',
+    2: '#e8e5e0',
+    3: '#5f5e5c',
+    4: '#f57626',
 };
 
 interface CodingPetProps {
@@ -9474,50 +9476,48 @@ export default function CatronautCoding({ scale = 5, className }: CodingPetProps
         if (!ctx) return;
         ctx.imageSmoothingEnabled = false;
 
-        const drawGrid = (grid: number[][], w: number, h: number, offX: number, offY: number) => {
-            for (let y = 0; y < h; y++) {
-                for (let x = 0; x < w; x++) {
-                    const color = PALETTE[grid[y][x]];
-                    if (!color) continue;
-                    ctx.fillStyle = color;
-                    ctx.fillRect(x + offX, y + offY, 1, 1);
-                }
-            }
-        };
-
-        let t = 0;
+        const cat = themedSprite(MAIN_GRID, PALETTE);
+        // the heart bubble already reads on both grounds (light outline, orange fill)
+        const heart = themedSprite(HEART_GRID, PALETTE).light;
+        const reduced = prefersReducedMotion();
         const HEART_CYCLE = 260;
 
-        const frame = () => {
-            t += 1;
+        let t = 0;
 
-            const hp = (t % HEART_CYCLE) / HEART_CYCLE;
-            let heartY: number;
-            let heartAlpha: number;
+        const render = () => {
+            let heartY = 0;
+            let heartAlpha = 1;
 
-            if (hp < 0.12) {
-                const p = hp / 0.12;
-                heartAlpha = p;
-                heartY = 0;
-            } else if (hp < 0.75) {
-                const p = (hp - 0.12) / 0.63;
-                heartAlpha = 1;
-                heartY = -Math.round(p * 4);
-            } else {
-                const p = (hp - 0.75) / 0.25;
-                heartAlpha = 1 - p;
-                heartY = -4;
+            if (!reduced) {
+                const hp = (t % HEART_CYCLE) / HEART_CYCLE;
+
+                if (hp < 0.12) {
+                    heartAlpha = hp / 0.12;
+                } else if (hp < 0.75) {
+                    heartY = -Math.round(((hp - 0.12) / 0.63) * 4);
+                } else {
+                    heartAlpha = 1 - (hp - 0.75) / 0.25;
+                    heartY = -4;
+                }
             }
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            drawGrid(MAIN_GRID, G, G, 0, 0);
+            ctx.drawImage(isDarkTheme() ? cat.dark : cat.light, 0, 0);
 
             ctx.save();
             ctx.globalAlpha = heartAlpha;
-            drawGrid(HEART_GRID, HW, HH, HX0, HY0 + heartY);
+            ctx.drawImage(heart, HX0, HY0 + heartY);
             ctx.restore();
+        };
 
+        if (reduced) {
+            render();
+            return;
+        }
+
+        const frame = () => {
+            t += 1;
+            render();
             rafRef.current = requestAnimationFrame(frame);
         };
 
