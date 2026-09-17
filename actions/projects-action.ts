@@ -7,6 +7,11 @@ import {
     type ProjectsCursorPage,
     type GetProjectsCursorParams, Project,
 } from '@/mock-data/projects';
+import type {
+    ProjectCategoryItem,
+    ProjectCategoryTree,
+    ProjectSubCategoryItem,
+} from '@/services/project-service';
 
 
 const EMPTY_PAGE: ProjectsCursorPage = { items: [], nextCursor: null, hasMore: false };
@@ -52,5 +57,41 @@ export async function getProjectBySlugAction(slug: string): Promise<Project | nu
         }
 
         return getMockProjectBySlug(slug) ?? null;
+    }
+}
+// Seed-like data that almost never changes, so keep it out of the per-render path.
+const CATEGORY_REVALIDATE_SECONDS = 3600;
+
+async function fetchSubCategories(categoryId: string): Promise<ProjectSubCategoryItem[]> {
+    try {
+        const envelope = await gatewayClient.get<{ items: ProjectSubCategoryItem[] }>(
+            `/api/projects/categories/${categoryId}/subcategories`,
+            { next: { revalidate: CATEGORY_REVALIDATE_SECONDS } },
+        );
+
+        return envelope.data?.items ?? [];
+    } catch {
+        return [];
+    }
+}
+
+// The API returns categories and sub-categories separately; the sidebar and the
+// project form both want the whole tree, so it is assembled once here.
+export async function getProjectCategoryTreeAction(): Promise<ProjectCategoryTree[]> {
+    try {
+        const envelope = await gatewayClient.get<{ items: ProjectCategoryItem[] }>('/api/projects/categories', {
+            next: { revalidate: CATEGORY_REVALIDATE_SECONDS },
+        });
+
+        const categories = envelope.data?.items ?? [];
+
+        return Promise.all(
+            categories.map(async (category) => ({
+                ...category,
+                subCategories: await fetchSubCategories(category.id),
+            })),
+        );
+    } catch {
+        return [];
     }
 }
