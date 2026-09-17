@@ -90,30 +90,38 @@ export default function SidebarFooter() {
         {
             label: 'Profile',
             icon: User,
-            onClick: () => router.push(`/profile/${user.displayName}`),
+            href: `/profile/${user.displayName}`,
         },
         {
             label: 'Settings',
             icon: Settings,
-            onClick: () => router.push('/member/settings'),
+            href: '/profile/settings',
         },
         {
             label: 'Create Project',
             icon: PlusCircle,
-            onClick: () => router.push('/projects/create_project'),
+            href: '/projects/create',
         },
         {
             label: 'Notifications',
             icon: Bell,
-            onClick: () => router.push('/notifications'),
+            href: '/notifications',
         },
     ];
+
+    // DropdownMenuItem luôn render motion.div (không nhận asChild) nên không bọc <Link> được,
+    // và router.push không tự prefetch. Prefetch lúc mở menu để khi bấm, loading.tsx của
+    // trang đích hiện ngay. (Prefetch chỉ chạy ở production, ở dev là no-op.)
+    const handleOpenChange = (open: boolean) => {
+        if (!open) return;
+        mainMenuItems.forEach((item) => router.prefetch(item.href));
+    };
 
     return (
         <SidebarFooterRadix>
             <SidebarMenu>
                 <SidebarMenuItem>
-                    <DropdownMenu>
+                    <DropdownMenu onOpenChange={handleOpenChange}>
                         <DropdownMenuTrigger asChild>
                             <AnimateIcon animateOnHover>
                                 <SidebarMenuButton
@@ -185,7 +193,7 @@ export default function SidebarFooter() {
                                     return (
                                         <AnimateIcon key={item.label} animateOnHover>
                                             <DropdownMenuItem
-                                                onClick={item.onClick}
+                                                onClick={() => router.push(item.href)}
                                                 className="cursor-pointer text-[#52514e] dark:text-[#c3c2b7]"
                                             >
                                                 <Icon />

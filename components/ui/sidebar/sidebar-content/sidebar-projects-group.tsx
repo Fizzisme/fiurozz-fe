@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense, use } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronRight, Folder, LayoutDashboard, Trash2, Folder as ProjectIcon } from 'lucide-react';
@@ -21,10 +22,16 @@ import {
     CollapsibleTrigger,
 } from '@/components/animate-ui/primitives/radix/collapsible';
 import { AnimateIcon } from '@/components/animate-ui/icons/icon';
-import { projectCategories } from '@/mock-data/projects';
+import { Skeleton } from '@/components/ui/global/skeleton';
+import CategoryIcon from '@/components/ui/project/category-icon';
 import { useUserStore } from '@/lib/store/user-store';
+import type { ProjectCategoryTree } from '@/services/project-service';
 
-export default function SidebarProjectsGroup() {
+export default function SidebarProjectsGroup({
+    categoriesPromise,
+}: {
+    categoriesPromise: Promise<ProjectCategoryTree[]>;
+}) {
     const pathname = usePathname();
     const user = useUserStore((state) => state.user);
 
@@ -142,88 +149,10 @@ export default function SidebarProjectsGroup() {
                                     {/* Project Categories               */}
                                     {/* -------------------------------- */}
 
-                                    {projectCategories.map((category) => {
-                                        const Icon = category.icon;
-
-                                        const categoryPath = `/projects/${category.slug}`;
-
-                                        // Mở sẵn nếu đang đứng trong category này (kể cả ở 1 sub-category con
-                                        // hoặc sâu hơn - trang chi tiết project). Có '/' ở cuối để tránh
-                                        // false-positive khi 1 category slug là tiền tố của category khác.
-                                        const isOpen =
-                                            pathname === categoryPath || pathname.startsWith(`${categoryPath}/`);
-
-                                        // Active riêng cho chính trang category (không tính sub-category)
-                                        const isCategoryActive = pathname === categoryPath;
-
-                                        return (
-                                            <Collapsible
-                                                key={category.slug}
-                                                defaultOpen={isOpen}
-                                                className="group/collapsible"
-                                            >
-                                                <SidebarMenuItem>
-                                                    {/* Category - bấm vẫn toggle mở/đóng NHƯNG đồng thời điều hướng luôn,
-                                                        vì bên trong CollapsibleTrigger giờ là 1 Link thật */}
-                                                    <CollapsibleTrigger asChild>
-                                                        <AnimateIcon animateOnHover asChild>
-                                                            <SidebarMenuButton
-                                                                asChild
-                                                                isActive={isCategoryActive}
-                                                                className="text-[#52514e] dark:text-[#c3c2b7]"
-                                                            >
-                                                                <Link href={categoryPath}>
-                                                                    <Icon />
-
-                                                                    <span className="min-w-0 truncate">
-                                                                        {category.title}
-                                                                    </span>
-
-                                                                    <ChevronRight className="ml-auto size-4 shrink-0 transition-transform duration-300 group-data-[state=open]/collapsible:rotate-90" />
-                                                                </Link>
-                                                            </SidebarMenuButton>
-                                                        </AnimateIcon>
-                                                    </CollapsibleTrigger>
-
-                                                    {/* Sub Categories */}
-                                                    <CollapsibleContent>
-                                                        <SidebarMenuSub>
-                                                            {category.subCategories.map((subCategory) => {
-                                                                const subCategoryPath = `${categoryPath}/${subCategory.slug}`;
-
-                                                                // === : đang đứng đúng trang sub-category
-                                                                // startsWith(path + '/'): đang ở route con (vd trang
-                                                                // chi tiết project) của sub-category này. Có '/' ở
-                                                                // cuối để tránh false-positive khi 1 slug là tiền tố
-                                                                // của slug khác.
-                                                                const isActive =
-                                                                    pathname === subCategoryPath ||
-                                                                    pathname.startsWith(`${subCategoryPath}/`);
-
-                                                                return (
-                                                                    <SidebarMenuSubItem key={subCategory.slug}>
-                                                                        <AnimateIcon animateOnHover asChild>
-                                                                            <SidebarMenuSubButton
-                                                                                asChild
-                                                                                isActive={isActive}
-                                                                                className="text-[#52514e] dark:text-[#c3c2b7]"
-                                                                            >
-                                                                                <Link href={subCategoryPath}>
-                                                                                    <span className="truncate">
-                                                                                        {subCategory.title}
-                                                                                    </span>
-                                                                                </Link>
-                                                                            </SidebarMenuSubButton>
-                                                                        </AnimateIcon>
-                                                                    </SidebarMenuSubItem>
-                                                                );
-                                                            })}
-                                                        </SidebarMenuSub>
-                                                    </CollapsibleContent>
-                                                </SidebarMenuItem>
-                                            </Collapsible>
-                                        );
-                                    })}
+                                    {/* Only this list waits for the API; the rest of the sidebar and the page render immediately. */}
+                                    <Suspense fallback={<CategoryListSkeleton />}>
+                                        <CategoryList categoriesPromise={categoriesPromise} />
+                                    </Suspense>
                                 </SidebarMenu>
                             </CollapsibleContent>
                         </SidebarMenuItem>
@@ -231,5 +160,104 @@ export default function SidebarProjectsGroup() {
                 </SidebarMenu>
             </SidebarGroupContent>
         </SidebarGroup>
+    );
+}
+
+function CategoryList({ categoriesPromise }: { categoriesPromise: Promise<ProjectCategoryTree[]> }) {
+    const pathname = usePathname();
+    // Suspends until the server finishes streaming the categories.
+    const categories = use(categoriesPromise);
+
+    return (
+        <>
+            {categories.map((category) => {
+                const categoryPath = `/projects/${category.slug}`;
+
+                const isOpen =
+                    pathname === categoryPath || pathname.startsWith(`${categoryPath}/`);
+
+                const isCategoryActive = pathname === categoryPath;
+
+                return (
+                    <Collapsible
+                        key={category.slug}
+                        defaultOpen={isOpen}
+                        className="group/collapsible"
+                    >
+                        <SidebarMenuItem>
+                            <CollapsibleTrigger asChild>
+                                <AnimateIcon animateOnHover asChild>
+                                    <SidebarMenuButton
+                                        asChild
+                                        isActive={isCategoryActive}
+                                        className="text-[#52514e] dark:text-[#c3c2b7]"
+                                    >
+                                        <Link href={categoryPath}>
+                                            <CategoryIcon icon={category.icon} />
+
+                                            <span className="min-w-0 truncate">
+                                                {category.title}
+                                            </span>
+
+                                            <ChevronRight className="ml-auto size-4 shrink-0 transition-transform duration-300 group-data-[state=open]/collapsible:rotate-90" />
+                                        </Link>
+                                    </SidebarMenuButton>
+                                </AnimateIcon>
+                            </CollapsibleTrigger>
+
+                            {/* Sub Categories */}
+                            <CollapsibleContent>
+                                <SidebarMenuSub>
+                                    {category.subCategories.map((subCategory) => {
+                                        const subCategoryPath = `${categoryPath}/${subCategory.slug}`;
+
+                                        const isActive =
+                                            pathname === subCategoryPath ||
+                                            pathname.startsWith(`${subCategoryPath}/`);
+
+                                        return (
+                                            <SidebarMenuSubItem key={subCategory.slug}>
+                                                <AnimateIcon animateOnHover asChild>
+                                                    <SidebarMenuSubButton
+                                                        asChild
+                                                        isActive={isActive}
+                                                        className="text-[#52514e] dark:text-[#c3c2b7]"
+                                                    >
+                                                        <Link href={subCategoryPath}>
+                                                            <span className="truncate">
+                                                                {subCategory.title}
+                                                            </span>
+                                                        </Link>
+                                                    </SidebarMenuSubButton>
+                                                </AnimateIcon>
+                                            </SidebarMenuSubItem>
+                                        );
+                                    })}
+                                </SidebarMenuSub>
+                            </CollapsibleContent>
+                        </SidebarMenuItem>
+                    </Collapsible>
+                );
+            })}
+        </>
+    );
+}
+
+// Fixed widths, not random: the fallback is server-rendered, so random values
+// would differ at hydration. 8 rows match the real list so nothing jumps.
+const SKELETON_WIDTHS = ['72%', '84%', '60%', '78%', '88%', '66%', '56%', '80%'];
+
+function CategoryListSkeleton() {
+    return (
+        <>
+            {SKELETON_WIDTHS.map((width, index) => (
+                <SidebarMenuItem key={index} aria-hidden="true">
+                    <div className="flex h-8 items-center gap-2 rounded-md px-2">
+                        <Skeleton className="size-4 shrink-0 rounded-md" />
+                        <Skeleton className="h-4" style={{ width }} />
+                    </div>
+                </SidebarMenuItem>
+            ))}
+        </>
     );
 }
