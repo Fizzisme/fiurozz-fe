@@ -1,10 +1,10 @@
-import MemberCardSkeleton from '@/components/ui/member/member-card-skeleton';
+import UserCardSkeleton from '@/components/ui/user/user-card-skeleton';
 import { Skeleton } from '@/components/ui/global/skeleton';
-import { MEMBER_ROLES } from '@/mock-data/members';
+import { USER_ROLES } from '@/mock-data/users';
 import { PAGE_SIZE } from '@/lib/constanst';
 
 /**
- * Must mirror every band of views/Members.tsx, not just the grid — the filter
+ * Must mirror every band of views/Users.tsx, not just the grid — the filter
  * bar sits between the intro and the cards, so leaving it out here drops the
  * grid ~130px and the whole page jumps when the real view takes over.
  *
@@ -22,7 +22,7 @@ export default function MembersLoading() {
                 Find other builders, see what they ship, and follow the ones whose work you want to keep up with.
             </p>
 
-            {/* FILTER BAR — heights must stay in step with MemberFilters */}
+            {/* FILTER BAR — heights must stay in step with UserFilters */}
             <section aria-hidden="true" className="mb-6">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <Skeleton className="h-9 flex-1" />
@@ -31,7 +31,7 @@ export default function MembersLoading() {
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
-                    {['All roles', ...MEMBER_ROLES].map((role) => (
+                    {['All roles', ...USER_ROLES].map((role) => (
                         <span
                             key={role}
                             className="animate-pulse rounded border border-transparent bg-muted px-2.5 py-1 text-xs font-medium text-transparent"
@@ -49,10 +49,10 @@ export default function MembersLoading() {
                 </div>
             </section>
 
-            {/* Grid columns must stay in step with views/Members.tsx */}
+            {/* Grid columns must stay in step with views/Users.tsx */}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
                 {Array.from({ length: PAGE_SIZE }).map((_, i) => (
-                    <MemberCardSkeleton key={i} />
+                    <UserCardSkeleton key={i} />
                 ))}
             </div>
         </div>

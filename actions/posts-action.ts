@@ -93,8 +93,8 @@ export async function createPostAction(input: CreatePostInput): Promise<CreatePo
 
     const author: PostAuthor = {
         id: user.id,
-        name: user.fullName ?? user.displayName,
-        username: user.displayName,
+        fullName: user.fullName ?? user.displayName,
+        displayName: user.displayName,
         avatar: user.avatarUrl,
         role: user.occupation,
     };

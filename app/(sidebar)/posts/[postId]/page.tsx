@@ -18,7 +18,7 @@ export async function generateMetadata({ params }: PostThreadPageProps): Promise
     }
 
     return {
-        title: `${thread.post.author.name} on Fiurozz`,
+        title: `${thread.post.author.fullName} on Fiurozz`,
         description: thread.post.text.slice(0, 160),
     };
 }

@@ -1,57 +1,21 @@
 import { create } from 'zustand';
 
-export interface SocialLink {
-    id: string;
-    platform: string;
-    title: string | null;
-    url: string;
-    order: number;
-}
+import type { ICurrentUser } from '@/types/user';
 
-export interface UserSettings {
-    isPrivate: boolean;
-    showEmail: boolean;
-    showBirthday: boolean;
-    allowMessage: boolean;
-    locale: string;
-    theme: string;
-}
-
-export interface CurrentUser {
-    id: string;
-    email: string;
-    displayName: string;
-    fullName: string | null;
-    avatarUrl: string | null;
-    coverUrl: string | null;
-    bio: string | null;
-    occupation: string | null;
-    company: string | null;
-    location: string | null;
-    birthday: string | null;
-    website: string | null;
-    gender: string;
-    language: string;
-    timezone: string;
-    settings: UserSettings | null;
-    links: SocialLink[];
-    createdAt: string;
-}
-
-interface UserState {
-    user: CurrentUser | null;
+interface IUserState {
+    user: ICurrentUser | null;
     // Distinguishes "we haven't checked yet" from "checked, no user
     // logged in". Without this, the very first render (before
     // AuthProvider's effect runs) would look identical to a logged-out
     // state, which can cause a flash of the wrong UI (e.g. showing the
     // login icon for a split second even when the user IS logged in).
     isInitialized: boolean;
-    setUser: (user: CurrentUser | null) => void;
-    updateUser: (patch: Partial<CurrentUser>) => void;
+    setUser: (user: ICurrentUser | null) => void;
+    updateUser: (patch: Partial<ICurrentUser>) => void;
     clearUser: () => void;
 }
 
-export const useUserStore = create<UserState>((set) => ({
+export const useUserStore = create<IUserState>((set) => ({
     user: null,
     isInitialized: false,
 

@@ -1,5 +1,5 @@
 import { CalendarDays, Cake, Link as LinkIcon, MapPin, UserPen } from 'lucide-react';
-import { CurrentUser, SocialLink } from '@/lib/store/user-store';
+import type { ICurrentUser, ISocialLink } from '@/types/user';
 import Github from '@/components/icons/github';
 import Facebook from '@/components/icons/facebook';
 import { Globe, Music2 } from 'lucide-react';
@@ -36,7 +36,7 @@ function formatBirthday(iso: string) {
     return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
 }
 
-function SocialLinks({ links }: { links: SocialLink[] }) {
+function SocialLinks({ links }: { links: ISocialLink[] }) {
     if (links.length === 0) return null;
     const sorted = [...links].sort((a, b) => a.order - b.order);
 
@@ -62,7 +62,7 @@ function SocialLinks({ links }: { links: SocialLink[] }) {
     );
 }
 
-export default function ProfileHeader({ user }: { user: CurrentUser }) {
+export default function ProfileHeader({ user }: { user: ICurrentUser }) {
     return (
         <div className="overflow-hidden rounded border bg-sidebar">
             {/* Cover */}

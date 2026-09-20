@@ -2,7 +2,6 @@
 
 import * as React from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { format, parse, isValid } from 'date-fns';
 import {
     Camera,
@@ -17,9 +16,16 @@ import {
     Mars,
     Venus,
     CircleHelp,
+    Transgender,
+    X,
+    type LucideIcon,
 } from 'lucide-react';
+import { toast } from 'sonner';
 
-import { useUserStore, SocialLink, UserSettings } from '@/lib/store/user-store';
+import { useUserStore } from '@/lib/store/user-store';
+import { userService } from '@/services/user-service';
+import { OCCUPATION_LABELS } from '@/mock-data/users';
+import type { Gender, IUpdateCurrentUserPayload, ISocialLink, IUserSettings, Occupation } from '@/types/user';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/global/avatar';
 import { Button } from '@/components/animate-ui/components/buttons/button';
 import { Input } from '@/components/ui/global/input';
@@ -39,11 +45,22 @@ import { useRouter } from 'next/navigation';
 /*                                 Constants                                  */
 /* -------------------------------------------------------------------------- */
 
-const GENDER_OPTIONS = [
-    { label: 'Male', value: 'male', icon: Mars },
-    { label: 'Female', value: 'female', icon: Venus },
-    { label: 'Prefer not to say', value: 'unspecified', icon: CircleHelp },
+// Values are the User Service's Gender enum, not display strings — the DTO
+// validates them with @IsEnum, so a friendly lowercase value would be rejected.
+const GENDER_OPTIONS: { label: string; value: Gender; icon: LucideIcon }[] = [
+    { label: 'Male', value: 'MALE', icon: Mars },
+    { label: 'Female', value: 'FEMALE', icon: Venus },
+    { label: 'Other', value: 'OTHER', icon: Transgender },
+    { label: 'Prefer not to say', value: 'UNKNOWN', icon: CircleHelp },
 ];
+
+/** Radix Select forbids an empty string value, so "no occupation" needs a sentinel. */
+const NO_OCCUPATION = '__none__';
+
+const OCCUPATION_OPTIONS = (Object.entries(OCCUPATION_LABELS) as [Occupation, string][]).map(([value, label]) => ({
+    value,
+    label,
+}));
 
 const LANGUAGE_OPTIONS = [
     { value: 'en', label: 'English' },
@@ -78,35 +95,42 @@ const BIO_MAX_LENGTH = 220;
 /*                              Form value type                               */
 /* -------------------------------------------------------------------------- */
 
+// Mirrors UpdateProfileDto, so everything here is actually savable. displayName
+// is deliberately absent: PATCH /api/users/me does not accept it.
 type EditableFields = {
-    displayName: string;
     fullName: string;
     bio: string;
-    occupation: string;
+    occupation: Occupation | '';
     company: string;
     location: string;
     website: string;
     birthday: Date | undefined;
-    gender: string;
+    gender: Gender;
+    skills: string[];
     language: string;
     timezone: string;
 };
 
-/* -------------------------------------------------------------------------- */
-/*                                    Page                                    */
-/* -------------------------------------------------------------------------- */
+/** Matches the DTO's @ArrayMaxSize(20) / @MaxLength(50, { each: true }). */
+const MAX_SKILLS = 20;
+const SKILL_MAX_LENGTH = 50;
 
 export default function Edit() {
     const user = useUserStore((state) => state.user);
     const updateUser = useUserStore((state) => state.updateUser);
 
     const [fields, setFields] = React.useState<EditableFields | null>(null);
-    const [links, setLinks] = React.useState<SocialLink[]>([]);
-    const [settings, setSettings] = React.useState<UserSettings | null>(null);
+    const [links, setLinks] = React.useState<ISocialLink[]>([]);
+    const [settings, setSettings] = React.useState<IUserSettings | null>(null);
+
+    /** The last state the server confirmed, to diff against when saving. */
+    const savedRef = React.useRef<EditableFields | null>(null);
 
     const [birthdayInput, setBirthdayInput] = React.useState('');
     const [birthdayOpen, setBirthdayOpen] = React.useState(false);
     const [birthdayError, setBirthdayError] = React.useState('');
+
+    const [skillInput, setSkillInput] = React.useState('');
 
     const [avatarPreview, setAvatarPreview] = React.useState<string | null>(null);
     const [coverPreview, setCoverPreview] = React.useState<string | null>(null);
@@ -120,20 +144,32 @@ export default function Edit() {
         if (!user || fields) return;
         const birthday = user.birthday ? new Date(user.birthday) : undefined;
 
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setFields({
-            displayName: user.displayName ?? '',
+        // ICurrentUser types these two as plain strings while the service stores
+        // enums, so anything unrecognised falls back instead of leaving a Select
+        // with a value none of its items match (which renders an empty trigger).
+        const gender = GENDER_OPTIONS.some((o) => o.value === user.gender) ? (user.gender as Gender) : 'UNKNOWN';
+        const occupation =
+            user.occupation && user.occupation in OCCUPATION_LABELS ? (user.occupation as Occupation) : '';
+
+        const loaded: EditableFields = {
             fullName: user.fullName ?? '',
             bio: user.bio ?? '',
-            occupation: user.occupation ?? '',
+            occupation,
             company: user.company ?? '',
             location: user.location ?? '',
             website: user.website ?? '',
             birthday,
-            gender: user.gender ?? 'unspecified',
+            gender,
+            skills: user.skills ?? [],
             language: user.language ?? 'en',
             timezone: user.timezone ?? 'UTC',
-        });
+        };
+
+        // Kept so handleSave can send only what actually changed — a PATCH that
+        // echoes every field back would rewrite untouched NULLs into ''.
+        savedRef.current = loaded;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setFields(loaded);
         setBirthdayInput(birthday ? format(birthday, 'dd/MM/yyyy') : '');
         setLinks(user.links ?? []);
         setSettings(
@@ -206,7 +242,7 @@ export default function Edit() {
         ]);
     }
 
-    function updateLink(id: string, patch: Partial<SocialLink>) {
+    function updateLink(id: string, patch: Partial<ISocialLink>) {
         setLinks((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
     }
 
@@ -214,35 +250,158 @@ export default function Edit() {
         setLinks((prev) => prev.filter((l) => l.id !== id).map((l, i) => ({ ...l, order: i })));
     }
 
-    async function handleSave() {
-        setSaving(true);
-        try {
-            // TODO: replace with real API calls, e.g.:
-            // if (avatarFile) await userService.uploadAvatar(avatarFile);
-            // if (coverFile) await userService.uploadCover(coverFile);
-            // await userService.updateProfile({ ...fields, links, settings });
+    /**
+     * The BE matches/stores skills case-insensitively (lowercased), so "React"
+     * and "react" are the same skill there — de-duping here too avoids a chip
+     * list that looks fine locally but collapses to fewer entries after save.
+     */
+    function addSkill() {
+        if (!fields) return;
+        const value = skillInput.trim();
+        if (!value) return;
 
-            if (!fields) {
+        if (fields.skills.some((s) => s.toLowerCase() === value.toLowerCase())) {
+            setSkillInput('');
+            return;
+        }
+        if (value.length > SKILL_MAX_LENGTH) {
+            toast.error(`Skill must be under ${SKILL_MAX_LENGTH} characters.`);
+            return;
+        }
+        if (fields.skills.length >= MAX_SKILLS) {
+            toast.error(`You can list up to ${MAX_SKILLS} skills.`);
+            return;
+        }
+
+        setField('skills', [...fields.skills, value]);
+        setSkillInput('');
+    }
+
+    function removeSkill(skill: string) {
+        if (!fields) return;
+        setField(
+            'skills',
+            fields.skills.filter((s) => s !== skill),
+        );
+    }
+
+    /**
+     * Only the fields that actually changed since the last save go in the
+     * PATCH body — echoing every field back would overwrite values other
+     * clients (or this same form, mid-edit) changed in between.
+     *
+     * occupation/website/birthday are NOT cleared by assigning `undefined`:
+     * confirmed against the real BE that `payload.field = undefined` still
+     * trips @IsUrl()/@IsEnum()/@IsDateString() ("website must be a URL
+     * address" even when the key held `undefined`, not a string) — the DTO
+     * must be resolving the field to '' before validation runs, not skipping
+     * it via @IsOptional() the way an absent key would. So clearing one of
+     * these three via this endpoint isn't wired yet: the field is simply
+     * left out of the diff, and clearedFields reports it so the caller can
+     * tell the user their edit didn't round-trip.
+     */
+    function buildUpdatePayload(
+        saved: EditableFields,
+        current: EditableFields,
+    ): { payload: IUpdateCurrentUserPayload; clearedFields: string[] } {
+        const payload: IUpdateCurrentUserPayload = {};
+        const clearedFields: string[] = [];
+
+        if (current.fullName !== saved.fullName) payload.fullName = current.fullName;
+        if (current.bio !== saved.bio) payload.bio = current.bio;
+        if (current.company !== saved.company) payload.company = current.company;
+        if (current.location !== saved.location) payload.location = current.location;
+        if (current.language !== saved.language) payload.language = current.language;
+        if (current.timezone !== saved.timezone) payload.timezone = current.timezone;
+        if (current.gender !== saved.gender) payload.gender = current.gender;
+
+        if (current.occupation !== saved.occupation) {
+            if (current.occupation) payload.occupation = current.occupation;
+            else clearedFields.push('Title');
+        }
+        if (current.website !== saved.website) {
+            if (current.website) payload.website = current.website;
+            else clearedFields.push('Website');
+        }
+
+        const savedTime = saved.birthday?.getTime();
+        const currentTime = current.birthday?.getTime();
+        if (currentTime !== savedTime) {
+            if (current.birthday) payload.birthday = current.birthday.toISOString();
+            else clearedFields.push('Birthday');
+        }
+
+        // skills is a full replacement, not a diff/append server-side — order
+        // doesn't change the set, so compare case-insensitively regardless of it.
+        const sortedSaved = [...saved.skills].map((s) => s.toLowerCase()).sort();
+        const sortedCurrent = [...current.skills].map((s) => s.toLowerCase()).sort();
+        const skillsChanged =
+            sortedSaved.length !== sortedCurrent.length || sortedSaved.some((s, i) => s !== sortedCurrent[i]);
+        if (skillsChanged) payload.skills = current.skills;
+
+        return { payload, clearedFields };
+    }
+
+    async function handleSave() {
+        if (!fields || !savedRef.current) return;
+
+        if (birthdayError) {
+            toast.error('Fix the birthday field before saving.');
+            return;
+        }
+
+        // TODO: avatar/cover go through a real upload endpoint once it exists —
+        // avatarPreview/coverPreview here are local blob: URLs, not something
+        // the User Service could store, so they are never sent in the PATCH body.
+
+        const { payload, clearedFields } = buildUpdatePayload(savedRef.current, fields);
+        if (Object.keys(payload).length === 0) {
+            if (clearedFields.length > 0) {
+                toast.error(`Clearing ${clearedFields.join(', ')} isn't supported yet — leave a value or reload to discard.`);
+            } else {
+                toast.info('Nothing to save.');
+            }
+            return;
+        }
+
+        setSaving(true);
+        const toastId = toast.loading('Saving your profile…');
+
+        try {
+            const result = await userService.updateMe(payload);
+            if (!result.ok) {
+                toast.error(result.message, { id: toastId });
                 return;
             }
 
-            updateUser({
-                displayName: fields.displayName,
-                fullName: fields.fullName || null,
-                bio: fields.bio || null,
-                occupation: fields.occupation || null,
-                company: fields.company || null,
-                location: fields.location || null,
-                website: fields.website || null,
-                birthday: fields.birthday ? fields.birthday.toISOString() : null,
-                gender: fields.gender,
-                language: fields.language,
-                timezone: fields.timezone,
-                links,
-                settings,
-                ...(avatarPreview ? { avatarUrl: avatarPreview } : {}),
-                ...(coverPreview ? { coverUrl: coverPreview } : {}),
-            });
+            updateUser(result.user);
+
+            // A cleared occupation/website/birthday never made it into payload,
+            // so the server still holds the old value — snap those three back
+            // to what savedRef had before this save, in both the new baseline
+            // and the visible inputs. Otherwise the box would sit empty while
+            // the real value is unchanged, and the next diff would try (and
+            // fail) to send the same clear again.
+            const nextSaved: EditableFields = { ...fields };
+            if (clearedFields.includes('Title')) nextSaved.occupation = savedRef.current.occupation;
+            if (clearedFields.includes('Website')) nextSaved.website = savedRef.current.website;
+            if (clearedFields.includes('Birthday')) nextSaved.birthday = savedRef.current.birthday;
+
+            savedRef.current = nextSaved;
+            setFields(nextSaved);
+            if (clearedFields.includes('Birthday')) {
+                setBirthdayInput(nextSaved.birthday ? format(nextSaved.birthday, 'dd/MM/yyyy') : '');
+            }
+
+            if (clearedFields.length > 0) {
+                toast.success(`Profile updated. ${clearedFields.join(', ')} could not be cleared and stayed as-is.`, {
+                    id: toastId,
+                });
+            } else {
+                toast.success('Profile updated.', { id: toastId });
+            }
+        } catch {
+            toast.error('Could not save your profile. Try again.', { id: toastId });
         } finally {
             setSaving(false);
         }
@@ -290,7 +449,7 @@ export default function Edit() {
                                     alt={user.displayName}
                                 />
                                 <AvatarFallback className="text-xl">
-                                    {getInitials(fields.fullName || fields.displayName)}
+                                    {getInitials(fields.fullName || user.displayName)}
                                 </AvatarFallback>
                             </Avatar>
                             <span className="absolute inset-0 flex items-center justify-center rounded bg-black/0 text-[#52514e] dark:text-[#c3c2b7] opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100">
@@ -316,26 +475,18 @@ export default function Edit() {
                     </CardHeader>
 
                     <CardContent className="space-y-5">
-                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                            <div className="space-y-2 text-[#52514e] dark:text-[#c3c2b7]">
-                                <Label>Display name</Label>
-                                <Input
-                                    value={fields.displayName}
-                                    maxLength={50}
-                                    onChange={(e) => setField('displayName', e.target.value)}
-                                    placeholder="Fizzisme"
-                                />
-                            </div>
-
-                            <div className="space-y-2 text-[#52514e] dark:text-[#c3c2b7]">
+                        <div className="space-y-2 text-[#52514e] dark:text-[#c3c2b7]">
+                            <div className="flex items-center justify-between">
                                 <Label>Full name</Label>
-                                <Input
-                                    value={fields.fullName}
-                                    maxLength={80}
-                                    onChange={(e) => setField('fullName', e.target.value)}
-                                    placeholder="Nguyen Le Tuan Phi"
-                                />
+                                {/* Handle is read-only here: PATCH /api/users/me has no displayName field. */}
+                                <span className="font-mono text-xs text-muted-foreground">@{user.displayName}</span>
                             </div>
+                            <Input
+                                value={fields.fullName}
+                                maxLength={80}
+                                onChange={(e) => setField('fullName', e.target.value)}
+                                placeholder="Nguyen Le Tuan Phi"
+                            />
                         </div>
 
                         <div className="space-y-2">
@@ -356,12 +507,27 @@ export default function Edit() {
 
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <div className="space-y-2 text-[#52514e] dark:text-[#c3c2b7]">
-                                <Label>Title</Label>
-                                <Input
-                                    value={fields.occupation}
-                                    onChange={(e) => setField('occupation', e.target.value)}
-                                    placeholder="e.g. Software Engineer"
-                                />
+                                <Label>Occupation</Label>
+                                <Select
+                                    value={fields.occupation || NO_OCCUPATION}
+                                    onValueChange={(v) =>
+                                        setField('occupation', v === NO_OCCUPATION ? '' : (v as Occupation))
+                                    }
+                                >
+                                    <SelectTrigger className="w-full cursor-pointer">
+                                        <SelectValue placeholder="e.g. Software Engineer" />
+                                    </SelectTrigger>
+                                    <SelectContent className="w-[var(--radix-select-trigger-width)]">
+                                        <SelectItem value={NO_OCCUPATION} className="cursor-pointer">
+                                            None
+                                        </SelectItem>
+                                        {OCCUPATION_OPTIONS.map((opt) => (
+                                            <SelectItem key={opt.value} value={opt.value} className="cursor-pointer">
+                                                {opt.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
                             <div className="space-y-2 text-[#52514e] dark:text-[#c3c2b7]">
                                 <Label>Company</Label>
@@ -371,6 +537,57 @@ export default function Edit() {
                                     placeholder="e.g. Freelance"
                                 />
                             </div>
+                        </div>
+
+                        <div className="space-y-2 text-[#52514e] dark:text-[#c3c2b7]">
+                            <div className="flex items-center justify-between">
+                                <Label>Skills</Label>
+                                <span className="text-xs text-muted-foreground">
+                                    {fields.skills.length}/{MAX_SKILLS}
+                                </span>
+                            </div>
+                            <div className="flex gap-2">
+                                <Input
+                                    value={skillInput}
+                                    maxLength={SKILL_MAX_LENGTH}
+                                    onChange={(e) => setSkillInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key !== 'Enter') return;
+                                        e.preventDefault();
+                                        addSkill();
+                                    }}
+                                    placeholder="e.g. TypeScript"
+                                />
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={addSkill}
+                                    className="shrink-0 cursor-pointer"
+                                    aria-label="Add skill"
+                                >
+                                    <Plus className="size-4" />
+                                </Button>
+                            </div>
+                            {fields.skills.length > 0 && (
+                                <div className="flex flex-wrap gap-2 pt-1">
+                                    {fields.skills.map((skill) => (
+                                        <span
+                                            key={skill}
+                                            className="flex items-center gap-1.5 rounded border border-foreground/10 px-2 py-1 font-mono text-xs text-muted-foreground"
+                                        >
+                                            {skill}
+                                            <button
+                                                type="button"
+                                                onClick={() => removeSkill(skill)}
+                                                aria-label={`Remove ${skill}`}
+                                                className="cursor-pointer text-muted-foreground hover:text-foreground"
+                                            >
+                                                <X className="size-3" />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -448,7 +665,7 @@ export default function Edit() {
                                 <Label className="flex items-center gap-1.5">
                                     <User className="h-3.5 w-3.5" /> Gender
                                 </Label>
-                                <Select value={fields.gender} onValueChange={(v) => setField('gender', v)}>
+                                <Select value={fields.gender} onValueChange={(v) => setField('gender', v as Gender)}>
                                     <SelectTrigger className="w-full cursor-pointer">
                                         <SelectValue />
                                     </SelectTrigger>
@@ -515,7 +732,11 @@ export default function Edit() {
                         <Separator />
 
                         <div className="space-y-3 text-[#52514e] dark:text-[#c3c2b7]">
-                            <Label>Social links</Label>
+                            <div className="flex items-center justify-between">
+                                <Label>Social links</Label>
+                                {/* PATCH /api/users/me has no links field yet — edits here don't persist. */}
+                                <span className="text-xs text-muted-foreground">Not saved yet</span>
+                            </div>
                             {links.map((link) => (
                                 <div key={link.id} className="flex items-start gap-2">
                                     <Select

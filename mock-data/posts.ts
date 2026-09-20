@@ -1,12 +1,13 @@
 // ============================================================
 // MOCK POSTS
 // Fixture cho trang /posts khi backend chưa có endpoint posts.
-// Tác giả lấy từ mockMembers, project đính kèm lấy từ mockProjects,
+// Tác giả lấy từ mockUsers, project đính kèm lấy từ mockProjects,
 // để một bài post nối được sang /members và /projects.
 // Đây là dữ liệu giả lập — không bao giờ trình bày như hoạt động thật.
 // ============================================================
 
-import { mockMembers, type Member } from '@/mock-data/members';
+import { mockUsers, OCCUPATION_LABELS } from '@/mock-data/users';
+import { type IUserSummary } from '@/types/user';
 import { mockProjects, type Project } from '@/mock-data/projects';
 
 // ============================================================
@@ -38,8 +39,8 @@ export type PostFeed = 'for-you' | 'following';
 
 export interface PostAuthor {
     id: string;
-    name: string;
-    username: string;
+    fullName: string;
+    displayName: string;
     avatar: string | null;
     role: string | null;
 }
@@ -258,13 +259,13 @@ const REPLY_TEXTS = [
 
 const MINUTE = 60_000;
 
-function toAuthor(member: Member): PostAuthor {
+function toAuthor(user: IUserSummary): PostAuthor {
     return {
-        id: member.id,
-        name: member.name,
-        username: member.username,
-        avatar: member.avatar,
-        role: member.role,
+        id: user.id,
+        fullName: user.fullName ?? user.displayName,
+        displayName: user.displayName,
+        avatar: user.avatarUrl,
+        role: user.occupation ? OCCUPATION_LABELS[user.occupation] : null,
     };
 }
 
@@ -293,7 +294,7 @@ function generateMockPosts(): Post[] {
     const replies: Post[] = [];
 
     SEEDS.forEach((seed, index) => {
-        const author = mockMembers[(index * 7 + 3) % mockMembers.length];
+        const author = mockUsers[(index * 7 + 3) % mockUsers.length];
         // Bài càng về cuối danh sách seed càng cũ, trải trong khoảng ~2 ngày
         const createdAt = now - (index * 125 + 18 + (hash(index, 3) % 40)) * MINUTE;
 
@@ -326,7 +327,7 @@ function generateMockPosts(): Post[] {
 
         const replyCount = hash(index, 5) % 5;
         for (let j = 0; j < replyCount; j += 1) {
-            const replier = mockMembers[(index * 5 + j * 11 + 1) % mockMembers.length];
+            const replier = mockUsers[(index * 5 + j * 11 + 1) % mockUsers.length];
             replies.push({
                 id: `${post.id}-r${j + 1}`,
                 author: toAuthor(replier),
@@ -357,15 +358,15 @@ const newestFirst = (a: Post, b: Post) => b.createdAt.localeCompare(a.createdAt)
 const oldestFirst = (a: Post, b: Post) => a.createdAt.localeCompare(b.createdAt);
 
 /**
- * Cursor pagination, cùng quy ước với members/projects: cursor = id của bài
- * cuối cùng đã lấy. "following" chỉ giữ bài của member mà viewer đang follow.
+ * Cursor pagination, cùng quy ước với users/projects: cursor = id của bài
+ * cuối cùng đã lấy. "following" chỉ giữ bài của user mà viewer đang follow.
  */
 export function getPostsCursorPage({ feed = 'for-you', cursor = null, limit = 10 }: GetPostsCursorParams = {}): PostsCursorPage {
     let source = mockPosts.filter((post) => post.parentId === null);
 
     if (feed === 'following') {
-        const followed = new Set(mockMembers.filter((m) => m.isFollowing).map((m) => m.username));
-        source = source.filter((post) => followed.has(post.author.username));
+        const followed = new Set(mockUsers.filter((m) => m.isFollowing).map((m) => m.displayName));
+        source = source.filter((post) => followed.has(post.author.displayName));
     }
 
     source = [...source].sort(newestFirst);

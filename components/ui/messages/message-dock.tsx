@@ -64,8 +64,8 @@ export default function MessageDock() {
 
     // A window may name someone the list has never held — press Message on a
     // builder you have not written to and the conversation is created here.
-    const ensure = useCallback(async (username: string) => {
-        const created = await messageService.openConversation(username);
+    const ensure = useCallback(async (displayName: string) => {
+        const created = await messageService.openConversation(displayName);
         if (!created) return;
         setConversations((prev) =>
             prev && prev.some((c) => c.id === created.id) ? prev : [created, ...(prev ?? [])],
@@ -81,8 +81,8 @@ export default function MessageDock() {
     useEffect(() => {
         if (conversations === null) return;
         openWindows
-            .filter((username) => !conversations.some((c) => c.id === username))
-            .forEach((username) => void ensure(username));
+            .filter((displayName) => !conversations.some((c) => c.id === displayName))
+            .forEach((displayName) => void ensure(displayName));
     }, [openWindows, conversations, ensure]);
 
     // Messaging belongs to a signed-in account, so the dock does not exist for a
@@ -99,7 +99,7 @@ export default function MessageDock() {
 
     // Newest window sits nearest the bar, so the row is built right to left.
     const windows = openWindows
-        .map((username) => conversations?.find((c) => c.id === username))
+        .map((displayName) => conversations?.find((c) => c.id === displayName))
         .filter((c): c is Conversation => Boolean(c))
         .reverse()
         // Only what fits is rendered — an off-screen window must not mount and

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CurrentUser } from '@/lib/store/user-store';
+import type { ICurrentUser } from '@/types/user';
 import { Briefcase, Mail, Plus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/global/card';
 import { Button } from '@/components/ui/global/button';
@@ -34,7 +34,7 @@ function AddPrompt({ label, description }: { label: string; description: string 
     );
 }
 
-export default function ProjectTabs({ user }: { user: CurrentUser }) {
+export default function ProjectTabs({ user }: { user: ICurrentUser }) {
     const hasPosition = Boolean(user.occupation || user.company);
     const showEmail = Boolean(user.settings?.showEmail);
 

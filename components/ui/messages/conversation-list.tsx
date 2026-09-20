@@ -88,13 +88,13 @@ export default function ConversationList({ conversations, unreadTotal }: Convers
                                 <li key={conversation.id}>
                                     <button
                                         type="button"
-                                        onClick={() => openConversation(conversation.username)}
+                                        onClick={() => openConversation(conversation.displayName)}
                                         className="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2.5 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-inset focus-visible:ring-ring/50"
                                     >
                                         <Avatar className="size-9 shrink-0 rounded-full after:rounded-full">
                                             <AvatarImage src={conversation.avatar} alt="" className="rounded-full" />
                                             <AvatarFallback className="rounded-full bg-muted font-mono text-[11px] text-foreground/60">
-                                                {initials(conversation.name)}
+                                                {initials(conversation.fullName)}
                                             </AvatarFallback>
                                         </Avatar>
 
@@ -105,7 +105,7 @@ export default function ConversationList({ conversations, unreadTotal }: Convers
                                                         conversation.unread > 0 ? 'font-semibold' : 'font-medium'
                                                     }`}
                                                 >
-                                                    {conversation.name}
+                                                    {conversation.fullName}
                                                 </span>
                                                 <time
                                                     dateTime={conversation.lastAt}

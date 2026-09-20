@@ -33,7 +33,7 @@ function clock(iso: string): string {
 export default function ChatWindow({ conversation, onRead }: ChatWindowProps) {
     const closeConversation = useMessageDockStore((state) => state.closeConversation);
     const toggleMinimize = useMessageDockStore((state) => state.toggleMinimize);
-    const isMinimized = useMessageDockStore((state) => Boolean(state.minimized[conversation.username]));
+    const isMinimized = useMessageDockStore((state) => Boolean(state.minimized[conversation.displayName]));
 
     const [messages, setMessages] = useState<DirectMessage[] | null>(null);
     const [draft, setDraft] = useState('');
@@ -78,7 +78,7 @@ export default function ChatWindow({ conversation, onRead }: ChatWindowProps) {
         }
     };
 
-    const headerId = `chat-${conversation.username}-title`;
+    const headerId = `chat-${conversation.displayName}-title`;
 
     return (
         <section
@@ -89,19 +89,19 @@ export default function ChatWindow({ conversation, onRead }: ChatWindowProps) {
             <div className="flex shrink-0 items-center gap-2 border-b border-foreground/10 px-3 py-2">
                 <button
                     type="button"
-                    onClick={() => toggleMinimize(conversation.username)}
+                    onClick={() => toggleMinimize(conversation.displayName)}
                     aria-expanded={!isMinimized}
                     className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-sm text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 >
                     <Avatar className="size-7 rounded-full after:rounded-full">
                         <AvatarImage src={conversation.avatar} alt="" className="rounded-full" />
                         <AvatarFallback className="rounded-full bg-muted font-mono text-[11px] text-foreground/60">
-                            {initials(conversation.name)}
+                            {initials(conversation.fullName)}
                         </AvatarFallback>
                     </Avatar>
 
                     <span id={headerId} className="truncate text-sm font-semibold tracking-[-0.01em]">
-                        {conversation.name}
+                        {conversation.fullName}
                     </span>
                 </button>
 
@@ -109,8 +109,8 @@ export default function ChatWindow({ conversation, onRead }: ChatWindowProps) {
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    onClick={() => toggleMinimize(conversation.username)}
-                    aria-label={isMinimized ? `Expand chat with ${conversation.name}` : `Collapse chat with ${conversation.name}`}
+                    onClick={() => toggleMinimize(conversation.displayName)}
+                    aria-label={isMinimized ? `Expand chat with ${conversation.fullName}` : `Collapse chat with ${conversation.fullName}`}
                 >
                     <Minus />
                 </Button>
@@ -119,8 +119,8 @@ export default function ChatWindow({ conversation, onRead }: ChatWindowProps) {
                     type="button"
                     variant="ghost"
                     size="icon-sm"
-                    onClick={() => closeConversation(conversation.username)}
-                    aria-label={`Close chat with ${conversation.name}`}
+                    onClick={() => closeConversation(conversation.displayName)}
+                    aria-label={`Close chat with ${conversation.fullName}`}
                 >
                     <X />
                 </Button>
@@ -140,7 +140,7 @@ export default function ChatWindow({ conversation, onRead }: ChatWindowProps) {
                             <div className="flex h-full flex-col items-center justify-center px-4 text-center">
                                 <p className="text-sm font-medium">No messages yet.</p>
                                 <p className="mt-1 text-xs text-muted-foreground">
-                                    Say hello to {conversation.name.split(' ')[0]} — a {conversation.role} on Fiurozz.
+                                    Say hello to {conversation.fullName.split(' ')[0]} — a {conversation.role} on Fiurozz.
                                 </p>
                             </div>
                         ) : (
@@ -177,11 +177,11 @@ export default function ChatWindow({ conversation, onRead }: ChatWindowProps) {
                     {/* COMPOSER — the dock only exists for a signed-in account, so
                         there is no guest branch to render here. */}
                     <form onSubmit={send} className="flex items-center gap-2 border-t border-foreground/10 p-2">
-                            <label htmlFor={`composer-${conversation.username}`} className="sr-only">
-                                Message {conversation.name}
+                            <label htmlFor={`composer-${conversation.displayName}`} className="sr-only">
+                                Message {conversation.fullName}
                             </label>
                             <input
-                                id={`composer-${conversation.username}`}
+                                id={`composer-${conversation.displayName}`}
                                 value={draft}
                                 onChange={(event) => setDraft(event.target.value)}
                                 placeholder="Write a message"

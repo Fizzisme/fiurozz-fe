@@ -44,7 +44,7 @@ export default function PostThread({ thread, autoFocusReply }: PostThreadProps) 
                 </div>
 
                 <PostComposer
-                    parent={{ id: post.id, authorName: post.author.name }}
+                    parent={{ id: post.id, authorName: post.author.fullName }}
                     onPosted={handlePosted}
                     autoFocus={autoFocusReply}
                     className="border-y border-border"

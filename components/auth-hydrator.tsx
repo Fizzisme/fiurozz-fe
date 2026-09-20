@@ -2,7 +2,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useUserStore, type CurrentUser } from '@/lib/store/user-store';
+import { useUserStore } from '@/lib/store/user-store';
+import type { ICurrentUser } from '@/types/user';
 
 // Bridges server-fetched user data into the client-side Zustand store.
 // This has nothing to do with React Context/Provider pattern -- Zustand
@@ -10,7 +11,7 @@ import { useUserStore, type CurrentUser } from '@/lib/store/user-store';
 // call client hooks (like useUserStore) directly; this is the one
 // client component whose only job is to receive the server-fetched
 // data as a prop and hand it off to the store.
-export function AuthHydrator({ initialUser }: { initialUser: CurrentUser | null }) {
+export function AuthHydrator({ initialUser }: { initialUser: ICurrentUser | null }) {
     const setUser = useUserStore((state) => state.setUser);
 
     useEffect(() => {
