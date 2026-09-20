@@ -3,17 +3,20 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { MapPin, School, Send } from 'lucide-react';
+import { format, isValid } from 'date-fns';
+import { BriefcaseBusiness, Building2, Cake, Globe, MapPin, Send} from 'lucide-react';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/global/avatar';
 import { Button } from '@/components/animate-ui/components/buttons/button';
-import { Member } from '@/mock-data/members';
-import { memberService } from '@/services/member-service';
+import { OCCUPATION_LABELS } from '@/mock-data/users';
+import { type IUserSummary } from '@/types/user';
+import { userService } from '@/services/user-service';
 import { useMessageDockStore } from '@/lib/store/message-dock-store';
 import { useUserStore } from '@/lib/store/user-store';
+import { getInitials } from '@/lib/utils';
 
-interface MemberCardProps {
-    member: Member;
+interface IUserCardProps {
+    user: IUserSummary;
     className?: string;
 }
 
@@ -38,15 +41,6 @@ function fitSkills(skills: string[]): string[] {
     return fitted;
 }
 
-/** Two initials, so a portrait that fails to load still reads as a person. */
-function initials(name: string): string {
-    return name
-        .split(' ')
-        .slice(0, 2)
-        .map((part) => part[0] ?? '')
-        .join('')
-        .toUpperCase();
-}
 
 function formatCount(value: number): string {
     return value >= 1000 ? `${(value / 1000).toFixed(1).replace(/\.0$/, '')}k` : `${value}`;
@@ -55,6 +49,12 @@ function formatCount(value: number): string {
 /** "1 project", "9 projects" — an abbreviated count is always plural. */
 function countLabel(value: number, singular: string): string {
     return `${formatCount(value)} ${value === 1 ? singular : `${singular}s`}`;
+}
+
+/** null on an unparsable date, so the Cake row hides itself instead of showing "Invalid Date". */
+function formatBirthday(iso: string): string | null {
+    const date = new Date(iso);
+    return isValid(date) ? format(date, 'MMM d, yyyy') : null;
 }
 
 /**
@@ -70,13 +70,17 @@ function countLabel(value: number, singular: string): string {
  * a `<Link>` wrapper: nesting a button inside an anchor is invalid markup and
  * breaks keyboard activation for both.
  */
-export default function MemberCard({ member, className }: MemberCardProps) {
-    const visible = fitSkills(member.skills);
-    const overflow = member.skills.length - visible.length;
+export default function UserCard({ user, className }: IUserCardProps) {
+    const visible = fitSkills(user.skills);
+    const overflow = user.skills.length - visible.length;
+    const birthdayLabel = user.birthday ? formatBirthday(user.birthday) : null;
+
+    const name = user.fullName ?? user.displayName;
 
     const openConversation = useMessageDockStore((state) => state.openConversation);
-    const user = useUserStore((state) => state.user);
+    const currentUser = useUserStore((state) => state.user);
     const isInitialized = useUserStore((state) => state.isInitialized);
+    const isOwnCard = currentUser?.id === user.id;
 
     const router = useRouter();
     const pathname = usePathname();
@@ -89,15 +93,15 @@ export default function MemberCard({ member, className }: MemberCardProps) {
      */
     const blockedByAuth = () => {
         if (!isInitialized) return true;
-        if (!user) {
+        if (!currentUser) {
             router.push(`/login?next=${encodeURIComponent(pathname)}`);
             return true;
         }
         return false;
     };
 
-    const [isFollowing, setIsFollowing] = useState(member.isFollowing);
-    const [followers, setFollowers] = useState(member.stats.followers);
+    const [isFollowing, setIsFollowing] = useState(user.isFollowing ?? false);
+    const [followers, setFollowers] = useState(user.stats?.followers ?? 0);
     const [isPending, startTransition] = useTransition();
 
     const toggleFollow = () => {
@@ -113,7 +117,7 @@ export default function MemberCard({ member, className }: MemberCardProps) {
 
         startTransition(async () => {
             try {
-                const result = await memberService.setFollow(member.username, next);
+                const result = await userService.setFollow(user.displayName, next);
                 setIsFollowing(result.isFollowing);
                 setFollowers(result.followers);
             } catch {
@@ -132,76 +136,117 @@ export default function MemberCard({ member, className }: MemberCardProps) {
                 <div className="flex items-center justify-between gap-2">
                     <Avatar className="size-12 rounded-full ring-1 ring-foreground/10 after:rounded-full">
                         <AvatarImage
-                            src={member.avatar}
+                            src={user.avatarUrl ?? undefined}
                             alt=""
-                            className="rounded-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover/card:scale-[1.06]"
+                            className="rounded transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover/card:scale-[1.06]"
                         />
-                        <AvatarFallback className="rounded-full bg-primary/10 font-mono text-xs text-foreground/60">
-                            {initials(member.name)}
+                        <AvatarFallback className="rounded bg-primary/10 font-mono text-xs text-foreground/60">
+                            {getInitials(name)}
                         </AvatarFallback>
                     </Avatar>
 
                     {/* Same lockup as the home member card — a bare Send glyph beside a
                         ghost Follow — but each is a real control so both are reachable by
-                        keyboard. Lifted above the stretched link so both stay clickable. */}
-                    <div className="relative z-10 flex shrink-0 items-center gap-3">
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => {
-                                if (blockedByAuth()) return;
-                                openConversation(member.username);
-                            }}
-                            aria-label={`Message ${member.name}`}
-                            title={`Message ${member.name}`}
-                            className="hover:bg-transparent"
-                        >
-                            <Send className="size-6" />
-                        </Button>
+                        keyboard. Lifted above the stretched link so both stay clickable.
+                        Neither applies to your own card: you can't follow or message yourself,
+                        so a "You" pill takes their place instead of leaving the slot empty. */}
+                    {isOwnCard ? (
+                        <span className="shrink-0 rounded-full border border-foreground/10 px-2.5 py-1 font-mono text-[11px] text-muted-foreground">
+                            You
+                        </span>
+                    ) : (
+                        <div className="relative z-10 flex shrink-0 items-center gap-3">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                onClick={() => {
+                                    if (blockedByAuth()) return;
+                                    openConversation(user.displayName);
+                                }}
+                                aria-label={`Message ${name}`}
+                                title={`Message ${name}`}
+                                className="hover:bg-transparent"
+                            >
+                                <Send className="size-6" />
+                            </Button>
 
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            onClick={toggleFollow}
-                            disabled={isPending}
-                            aria-pressed={isFollowing}
-                            aria-label={isFollowing ? `Unfollow ${member.name}` : `Follow ${member.name}`}
-                            className={`px-1 ${isFollowing ? 'text-muted-foreground' : ''}`}
-                        >
-                            {isFollowing ? 'Following' : 'Follow'}
-                        </Button>
-                    </div>
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={toggleFollow}
+                                disabled={isPending}
+                                aria-pressed={isFollowing}
+                                aria-label={isFollowing ? `Unfollow ${name}` : `Follow ${name}`}
+                                className={`px-1 ${isFollowing ? 'text-muted-foreground' : ''}`}
+                            >
+                                {isFollowing ? 'Following' : 'Follow'}
+                            </Button>
+                        </div>
+                    )}
                 </div>
 
                 {/* NAME — its own line, carrying the stretched link for the card */}
                 <div className="mt-3">
                     <h3 className="truncate text-lg font-semibold tracking-[-0.02em]">
                         <Link
-                            href={`/profile/${member.username}`}
+                            href={isOwnCard ? `/profile/${user.displayName}` : `/members/${user.displayName}`}
                             className="rounded-sm outline-none after:absolute after:inset-0 focus-visible:ring-[3px] focus-visible:ring-ring/50"
                         >
-                            {member.name}
+                            {name}
                         </Link>
                     </h3>
                     <p className="truncate font-mono text-[11px] tracking-[0.04em] text-muted-foreground">
-                        @{member.username}
+                        @{user.displayName}
                     </p>
                 </div>
 
                 {/* THEIR LINE */}
-                <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-foreground/80">{member.headline}</p>
+                <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-foreground/80">{user.bio}</p>
 
                 {/* FACTS */}
-                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1.5">
-                        <School className="size-3.5 shrink-0" />
-                        <span className="truncate">{member.role}</span>
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+                    {user.occupation && (
+                        <span className="flex items-center gap-1.5">
+                            <BriefcaseBusiness className="size-3.5 shrink-0" />
+                            <span className="truncate">
+                                {OCCUPATION_LABELS[user.occupation]}
+                            </span>
+                        </span>
+                    )}
+
+                    {user.company && (
+                        <span className="flex items-center gap-1.5">
+                            <Building2 className="size-3.5 shrink-0" />
+                        <span className="truncate">{user.company}</span>
                     </span>
-                    <span className="flex items-center gap-1.5">
-                        <MapPin className="size-3.5 shrink-0" />
-                        <span className="truncate">{member.location}</span>
+                    )}
+
+                    {user.location && (
+                        <span className="flex items-center gap-1.5">
+                            <MapPin className="size-3.5 shrink-0" />
+                        <span className="truncate">{user.location}</span>
                     </span>
+                    )}
+
+                    {birthdayLabel && (
+                        <span className="flex items-center gap-1.5">
+                            <Cake className="size-3.5 shrink-0" />
+                            <span>{birthdayLabel}</span>
+                        </span>
+                    )}
+
+                    {user.website && (
+                        <a
+                            href={user.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 hover:text-foreground transition-colors"
+                        >
+                            <Globe className="size-3.5 shrink-0" />
+                            <span className="truncate">{user.website}</span>
+                        </a>
+                    )}
                 </div>
 
                 {/* STACK — hairline mono chips, never filled; a run past three collapses */}
@@ -220,14 +265,16 @@ export default function MemberCard({ member, className }: MemberCardProps) {
                 </div>
             </div>
 
-            {/* FOOTER — what they have shipped */}
-            <div className="border-t border-foreground/10 px-4 py-3 sm:px-5">
-                <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                    {countLabel(member.stats.projects, 'project')}
-                    <span className="mx-1.5 text-foreground/20">·</span>
-                    {countLabel(followers, 'follower')}
-                </p>
-            </div>
+            {/* FOOTER — what they have shipped (hidden until BE exposes real counts) */}
+            {user.stats && (
+                <div className="border-t border-foreground/10 px-4 py-3 sm:px-5">
+                    <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                        {countLabel(user.stats.projects, 'project')}
+                        <span className="mx-1.5 text-foreground/20">·</span>
+                        {countLabel(followers, 'follower')}
+                    </p>
+                </div>
+            )}
         </div>
     );
 }

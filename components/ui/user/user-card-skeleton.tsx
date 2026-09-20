@@ -1,23 +1,24 @@
 import { Skeleton } from '@/components/ui/global/skeleton';
 
-interface MemberCardSkeletonProps {
+interface IUserCardSkeletonProps {
     className?: string;
 }
 
 /**
- * Mirrors MemberCard's own bands and its hairline-separated footer rather than
+ * Mirrors UserCard's own bands and its hairline-separated footer rather than
  * one flat rectangle, so the grid doesn't jump when real cards swap in.
  */
-export default function MemberCardSkeleton({ className }: MemberCardSkeletonProps) {
+export default function UserCardSkeleton({ className }: IUserCardSkeletonProps) {
     return (
         <div
             aria-hidden="true"
-            className={`flex h-full flex-col overflow-hidden rounded bg-card ring-1 ring-foreground/10 ${className ?? ''}`}
+            className={`flex h-full flex-col overflow-hidden rounded bg-card ring-1 ring-foreground/10 ${className ??
+                ''}`}
         >
             <div className="flex flex-1 flex-col px-4 pt-4 pb-4 sm:px-5 sm:pt-5">
                 {/* HEADER — portrait left, actions right */}
                 <div className="flex items-center justify-between gap-2">
-                    <Skeleton className="size-12 shrink-0 rounded-full" />
+                    <Skeleton className="size-12 shrink-0 rounded" />
                     <div className="flex shrink-0 items-center gap-3">
                         <Skeleton className="size-6 rounded-sm" />
                         <Skeleton className="h-5 w-14" />

@@ -1,64 +1,107 @@
 // ============================================================
-// MOCK MEMBERS
-// Fixture cho trang /members khi backend chưa có endpoint list user.
-// Shape bám theo các trường mà components/ui/home/memberCard.tsx đang
-// hiển thị, để sau này tái dùng card đó không phải đổi kiểu dữ liệu.
+// MOCK USERS
+// Fixture behind the /members page, used whenever the user-service call fails.
+// Types live in types/user.ts; this file holds the domain constants the UI
+// reads plus the fixture itself.
 // ============================================================
 
-export interface MemberStats {
-    projects: number;
-    followers: number;
-    following: number;
-    likes: number;
-}
-
-export interface Member {
-    id: string;
-    name: string;
-    username: string;
-    avatar: string;
-    email: string;
-    /** Câu slogan ngắn hiện dưới tên */
-    headline: string;
-    /** Nghề / vai trò, hiển thị cạnh icon School */
-    role: string;
-    location: string;
-    /** ISO date - hiển thị cạnh icon Cake */
-    birthday: string;
-    skills: string[];
-    stats: MemberStats;
-    /** Người đang xem có theo dõi member này không (BE trả theo từng viewer) */
-    isFollowing: boolean;
-    /** ISO date - ngày tham gia Fiurozz */
-    joinedAt: string;
-}
+import type { Gender, IUserSummary, IUsersCursorPage, IUsersQueries, Occupation, UserSort } from '@/types/user';
 
 // ============================================================
-// NGUỒN SINH DỮ LIỆU
+// DATA SOURCE
 // ============================================================
 
 const NAMES = [
-    'Tuan Phi', 'Van Thai', 'Minh Anh', 'Ngoc Han', 'Quoc Bao', 'Thu Trang',
-    'Hoang Long', 'Bao Chau', 'Duy Khang', 'Kim Ngan', 'Gia Huy', 'Thanh Tam',
-    'Tien Dat', 'Phuong Uyen', 'Nhat Minh', 'Khanh Linh', 'Trung Kien', 'My Duyen',
-    'Hai Dang', 'Tuong Vi', 'Anh Tuan', 'Le Vy', 'Dang Khoa', 'Thuy Tien',
-    'Quang Vinh', 'Hong Nhung', 'Xuan Bach', 'Cam Tu', 'Huu Phuoc', 'Dieu Linh',
-    'Tan Loc', 'Mai Chi', 'Nguyen Vu', 'Hoai Thuong', 'Dinh Nam', 'Thao Nguyen',
-    'Viet Hung', 'Bich Ngoc', 'Cong Danh', 'Yen Nhi', 'Truong Son', 'Kieu Trang',
-    'Ba Duy', 'Lan Huong', 'The Anh', 'Tuyet Mai', 'Sy Nguyen', 'Ha Vy',
+    'Tuan Phi',
+    'Van Thai',
+    'Minh Anh',
+    'Ngoc Han',
+    'Quoc Bao',
+    'Thu Trang',
+    'Hoang Long',
+    'Bao Chau',
+    'Duy Khang',
+    'Kim Ngan',
+    'Gia Huy',
+    'Thanh Tam',
+    'Tien Dat',
+    'Phuong Uyen',
+    'Nhat Minh',
+    'Khanh Linh',
+    'Trung Kien',
+    'My Duyen',
+    'Hai Dang',
+    'Tuong Vi',
+    'Anh Tuan',
+    'Le Vy',
+    'Dang Khoa',
+    'Thuy Tien',
+    'Quang Vinh',
+    'Hong Nhung',
+    'Xuan Bach',
+    'Cam Tu',
+    'Huu Phuoc',
+    'Dieu Linh',
+    'Tan Loc',
+    'Mai Chi',
+    'Nguyen Vu',
+    'Hoai Thuong',
+    'Dinh Nam',
+    'Thao Nguyen',
+    'Viet Hung',
+    'Bich Ngoc',
+    'Cong Danh',
+    'Yen Nhi',
+    'Truong Son',
+    'Kieu Trang',
+    'Ba Duy',
+    'Lan Huong',
+    'The Anh',
+    'Tuyet Mai',
+    'Sy Nguyen',
+    'Ha Vy',
 ];
 
-export const MEMBER_ROLES = [
-    'Student', 'Frontend Developer', 'Backend Developer', 'Fullstack Developer',
-    'UI/UX Designer', 'Mobile Developer', 'DevOps Engineer', 'Data Engineer',
+export const USER_ROLES = [
+    'Student',
+    'Frontend Developer',
+    'Backend Developer',
+    'Fullstack Developer',
+    'UI/UX Designer',
+    'Mobile Developer',
+    'DevOps Engineer',
+    'Data Engineer',
 ];
 
-const LOCATIONS = [
-    'Pleiku', 'Ha Noi', 'Da Nang', 'Ho Chi Minh City',
-    'Can Tho', 'Hue', 'Nha Trang', 'Hai Phong',
-];
+/** The label to show for a stored occupation. USER_ROLES is the filterable subset. */
+export const OCCUPATION_LABELS: Record<Occupation, string> = {
+    STUDENT: 'Student',
+    FRONTEND_DEVELOPER: 'Frontend Developer',
+    BACKEND_DEVELOPER: 'Backend Developer',
+    FULLSTACK_DEVELOPER: 'Fullstack Developer',
+    MOBILE_DEVELOPER: 'Mobile Developer',
+    SOFTWARE_ENGINEER: 'Software Engineer',
+    DEVOPS_ENGINEER: 'DevOps Engineer',
+    DATA_ENGINEER: 'Data Engineer',
+    DATA_ANALYST: 'Data Analyst',
+    UI_UX_DESIGNER: 'UI/UX Designer',
+    PRODUCT_MANAGER: 'Product Manager',
+    QA: 'QA',
+    AI_ENGINEER: 'AI Engineer',
+    BA: 'BA',
+    OTHER: 'Other',
+};
 
-const HEADLINES = [
+/** Inverse of OCCUPATION_LABELS, so the label-based role filter resolves to an enum value. */
+const OCCUPATION_BY_ROLE: Record<string, Occupation> = Object.fromEntries(
+    (Object.entries(OCCUPATION_LABELS) as [Occupation, string][]).map(([value, label]) => [label, value]),
+);
+
+const GENDERS: Gender[] = ['MALE', 'FEMALE', 'OTHER', 'UNKNOWN'];
+
+const LOCATIONS = ['Pleiku', 'Ha Noi', 'Da Nang', 'Ho Chi Minh City', 'Can Tho', 'Hue', 'Nha Trang', 'Hai Phong'];
+
+const BIO = [
     'Building things that load fast.',
     'Shipping small, shipping often.',
     'I care about the details nobody notices.',
@@ -69,9 +112,19 @@ const HEADLINES = [
     'Side projects are my main hobby.',
 ];
 
-export const MEMBER_SKILLS = [
-    'React', 'Next.js', 'TypeScript', 'Node.js', 'NestJS', 'Spring Boot',
-    'PostgreSQL', 'MongoDB', 'Tailwind CSS', 'GSAP', 'Docker', 'Figma',
+export const USER_SKILLS = [
+    'React',
+    'Next.js',
+    'TypeScript',
+    'Node.js',
+    'NestJS',
+    'Spring Boot',
+    'PostgreSQL',
+    'MongoDB',
+    'Tailwind CSS',
+    'GSAP',
+    'Docker',
+    'Figma',
 ];
 
 // ============================================================
@@ -88,9 +141,9 @@ function slugify(text: string): string {
 }
 
 /**
- * Băm số nguyên -> số nguyên, xác định và không tuyến tính.
- * Cần thiết vì `index * k % n` khoá các trường vào nhau: mọi member cùng role
- * sẽ nhận trùng headline và location, khiến trang trông như hỏng dữ liệu.
+ * Integer -> integer hash, deterministic and non-linear.
+ * Needed because `index * k % n` locks fields together: every user with the
+ * same role would get the same bio and location, making the page look broken.
  */
 function hash(seed: number, salt: number): number {
     let x = Math.imul(seed + salt * 0x9e37, 0x85eb) ^ 0x27d4;
@@ -99,7 +152,7 @@ function hash(seed: number, salt: number): number {
     return Math.abs(x);
 }
 
-/** Pseudo-random nhưng xác định (deterministic) dựa trên seed số nguyên */
+/** Pseudo-random but deterministic, based on an integer seed */
 function pick<T>(arr: T[], seed: number, salt = 0): T {
     return arr[hash(seed, salt) % arr.length];
 }
@@ -108,11 +161,11 @@ function pad(num: number, size = 3): string {
     return num.toString().padStart(size, '0');
 }
 
-/** Lấy n skill khác nhau từ SKILL_POOL, vẫn deterministic theo seed */
+/** Picks n distinct skills from USER_SKILLS, still deterministic by seed */
 function pickSkills(seed: number, count: number): string[] {
     const skills: string[] = [];
-    for (let i = 0; skills.length < count && i < MEMBER_SKILLS.length * 2; i += 1) {
-        const skill = MEMBER_SKILLS[hash(seed, 90 + i) % MEMBER_SKILLS.length];
+    for (let i = 0; skills.length < count && i < USER_SKILLS.length * 2; i += 1) {
+        const skill = USER_SKILLS[hash(seed, 90 + i) % USER_SKILLS.length];
         if (!skills.includes(skill)) skills.push(skill);
     }
     return skills;
@@ -122,24 +175,30 @@ function pickSkills(seed: number, count: number): string[] {
 // GENERATE
 // ============================================================
 
-const MEMBERS_TOTAL = NAMES.length;
+const USERS_TOTAL = NAMES.length;
 
-function generateMockMembers(): Member[] {
-    return Array.from({ length: MEMBERS_TOTAL }, (_, index) => {
-        const name = NAMES[index];
-        const username = slugify(name);
+function generateMockUsers(): IUserSummary[] {
+    return Array.from({ length: USERS_TOTAL }, (_, index) => {
+        const fullName = NAMES[index];
+        const displayName = slugify(fullName);
+        const role = pick(USER_ROLES, index, 23);
 
         return {
-            id: `member-${pad(index + 1)}`,
-            name,
-            username,
-            avatar: `https://i.pravatar.cc/150?u=${username}`,
-            email: `${username}@example.com`,
-            headline: pick(HEADLINES, index, 11),
-            role: pick(MEMBER_ROLES, index, 23),
+            id: `user-${pad(index + 1)}`,
+            fullName,
+            displayName,
+            avatarUrl: `https://i.pravatar.cc/150?u=${displayName}`,
+            coverUrl: null,
+            email: `${displayName}@example.com`,
+            bio: pick(BIO, index, 11),
+            occupation: OCCUPATION_BY_ROLE[role] ?? null,
+            company: null,
             location: pick(LOCATIONS, index, 47),
-            birthday: new Date(2000 + (index % 6), index % 12, ((index * 3) % 28) + 1).toISOString(),
+            website: null,
+            gender: pick(GENDERS, index, 59),
             skills: pickSkills(index, 3 + (hash(index, 71) % 3)),
+            birthday: new Date(2000 + (index % 6), index % 12, ((index * 3) % 28) + 1).toISOString(),
+            createdAt: new Date(2024, index % 12, ((index * 2) % 28) + 1).toISOString(),
             isFollowing: hash(index, 137) % 4 === 0,
             stats: {
                 projects: 1 + ((index * 5) % 24),
@@ -147,115 +206,88 @@ function generateMockMembers(): Member[] {
                 following: 5 + ((index * 13) % 400),
                 likes: 20 + ((index * 29) % 2400),
             },
-            joinedAt: new Date(2024, index % 12, ((index * 2) % 28) + 1).toISOString(),
         };
     });
 }
 
-export const mockMembers: Member[] = generateMockMembers();
+export const mockUsers: IUserSummary[] = generateMockUsers();
 
 // ============================================================
-// TRUY VẤN
+// QUERIES
 // ============================================================
 
-export function getMemberByUsername(username: string): Member | undefined {
-    return mockMembers.find((m) => m.username === username);
+export function getUserByDisplayName(displayName: string): IUserSummary | undefined {
+    return mockUsers.find((u) => u.displayName === displayName);
 }
 
 /**
- * Đổi trạng thái follow ngay trên fixture, để mock cư xử như một BE có state
- * thật: tải lại trang vẫn giữ nguyên trong vòng đời của server process.
+ * Flips follow state directly on the fixture, so the mock behaves like a
+ * real backend with state: reloading the page keeps it for the server process's lifetime.
  */
-export function setMockFollow(username: string, isFollowing: boolean): Member | undefined {
-    const member = mockMembers.find((m) => m.username === username);
-    if (!member || member.isFollowing === isFollowing) return member;
+export function setMockFollow(displayName: string, isFollowing: boolean): IUserSummary | undefined {
+    const user = mockUsers.find((u) => u.displayName === displayName);
+    if (!user || user.isFollowing === isFollowing) return user;
 
-    member.isFollowing = isFollowing;
-    member.stats.followers += isFollowing ? 1 : -1;
-    return member;
+    user.isFollowing = isFollowing;
+    if (user.stats) user.stats.followers += isFollowing ? 1 : -1;
+    return user;
 }
 
 // ============================================================
 // CURSOR PAGINATION
-// Cùng quy ước với mock-data/projects.ts: cursor = id của item cuối
-// cùng đã lấy, client gửi lại để lấy "trang" tiếp theo.
+// Same convention as mock-data/projects.ts: cursor = id of the last item
+// fetched, sent back by the client to get the next "page".
 // ============================================================
 
-export interface MembersCursorPage {
-    items: Member[];
-    nextCursor: string | null;
-    hasMore: boolean;
-    /** Tổng số member khớp bộ lọc hiện tại (không phải số item của trang này) */
-    total: number;
-}
-
-/** Thứ tự sắp xếp danh sách member */
-export type MemberSort = 'followers' | 'projects' | 'recent' | 'name';
-
-export const MEMBER_SORTS: { value: MemberSort; label: string }[] = [
+export const USER_SORTS: { value: UserSort; label: string }[] = [
     { value: 'followers', label: 'Most followers' },
     { value: 'projects', label: 'Most projects' },
     { value: 'recent', label: 'Recently joined' },
     { value: 'name', label: 'Name A-Z' },
 ];
 
-export interface GetMembersCursorParams {
-    /** id của member cuối cùng đã load, null = lấy từ đầu */
-    cursor?: string | null;
-    /** số lượng item mỗi lần load */
-    limit?: number;
-    /** tìm theo tên / username / role / skill, null|undefined = không lọc */
-    q?: string | null;
-    /** lọc theo role, null|undefined = tất cả */
-    role?: string | null;
-    /** lọc theo skill, null|undefined = tất cả */
-    skill?: string | null;
-    /** thứ tự sắp xếp, mặc định 'followers' */
-    sort?: MemberSort | null;
-}
-
-const SORTERS: Record<MemberSort, (a: Member, b: Member) => number> = {
-    followers: (a, b) => b.stats.followers - a.stats.followers,
-    projects: (a, b) => b.stats.projects - a.stats.projects,
-    recent: (a, b) => b.joinedAt.localeCompare(a.joinedAt),
-    name: (a, b) => a.name.localeCompare(b.name),
+const SORTERS: Record<UserSort, (a: IUserSummary, b: IUserSummary) => number> = {
+    followers: (a, b) => (b.stats?.followers ?? 0) - (a.stats?.followers ?? 0),
+    projects: (a, b) => (b.stats?.projects ?? 0) - (a.stats?.projects ?? 0),
+    recent: (a, b) => b.createdAt.localeCompare(a.createdAt),
+    name: (a, b) => (a.fullName ?? a.displayName).localeCompare(b.fullName ?? b.displayName),
 };
 
-export function getMembersCursorPage({
+export function getUsersCursorPage({
     cursor = null,
     limit = 15,
     q = null,
     role = null,
     skill = null,
     sort = 'followers',
-}: GetMembersCursorParams = {}): MembersCursorPage {
-    let source = mockMembers;
+}: IUsersQueries = {}): IUsersCursorPage {
+    let source = mockUsers;
 
     if (q) {
         const keyword = q.trim().toLowerCase();
         source = source.filter(
-            (m) =>
-                m.name.toLowerCase().includes(keyword) ||
-                m.username.toLowerCase().includes(keyword) ||
-                m.role.toLowerCase().includes(keyword) ||
-                m.skills.some((s) => s.toLowerCase().includes(keyword)),
+            (u) =>
+                (u.fullName ?? '').toLowerCase().includes(keyword) ||
+                u.displayName.toLowerCase().includes(keyword) ||
+                (u.occupation ? OCCUPATION_LABELS[u.occupation] : '').toLowerCase().includes(keyword) ||
+                u.skills.some((s) => s.toLowerCase().includes(keyword)),
         );
     }
 
     if (role) {
-        source = source.filter((m) => m.role === role);
+        source = source.filter((u) => u.occupation === OCCUPATION_BY_ROLE[role]);
     }
 
     if (skill) {
-        source = source.filter((m) => m.skills.includes(skill));
+        source = source.filter((u) => u.skills.includes(skill));
     }
 
-    // Sắp xếp trước khi cắt trang, nếu không cursor sẽ trỏ nhầm item
+    // Sort before slicing, otherwise the cursor would point at the wrong item
     source = [...source].sort(SORTERS[sort ?? 'followers']);
 
-    const startIndex = cursor ? source.findIndex((m) => m.id === cursor) + 1 : 0;
+    const startIndex = cursor ? source.findIndex((u) => u.id === cursor) + 1 : 0;
 
-    // cursor không tồn tại trong tập dữ liệu (đã bị lọc/xoá) -> trả rỗng, tránh loop
+    // cursor not found in the data set (filtered out / deleted) -> return empty, avoid a loop
     if (cursor && startIndex === 0) {
         return { items: [], nextCursor: null, hasMore: false, total: source.length };
     }
@@ -268,11 +300,8 @@ export function getMembersCursorPage({
     return { items, nextCursor, hasMore, total: source.length };
 }
 
-/** Giả lập gọi API bất đồng bộ (có độ trễ mạng) cho cursor pagination phía client */
-export async function fetchMembersCursorPage(
-    params: GetMembersCursorParams = {},
-    delayMs = 600,
-): Promise<MembersCursorPage> {
+/** Simulates an async API call (with network delay) for client-side cursor pagination */
+export async function fetchUsersCursorPage(queries: IUsersQueries = {}, delayMs = 600): Promise<IUsersCursorPage> {
     await new Promise((resolve) => setTimeout(resolve, delayMs));
-    return getMembersCursorPage(params);
+    return getUsersCursorPage(queries);
 }

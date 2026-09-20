@@ -3,39 +3,34 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 
-import { type Member } from '@/mock-data/members';
-import MemberCard from '@/components/ui/member/member-card';
-import MemberCardSkeleton from '@/components/ui/member/member-card-skeleton';
-import MemberFilters, { type MemberFilterState } from '@/components/ui/member/member-filters';
+import { type IUserSummary } from '@/types/user';
+import UserCard from '@/components/ui/user/user-card';
+import UserCardSkeleton from '@/components/ui/user/user-card-skeleton';
+import UserFilters, { type IUserFilterState } from '@/components/ui/user/user-filters';
 import { PAGE_SIZE } from '@/lib/constanst';
-import { memberService } from '@/services/member-service';
+import { userService } from '@/services/user-service';
 
-interface MembersProps {
-    initialMembers: Member[];
+interface IUsersProps {
+    initialUsers: IUserSummary[];
     initialCursor: string | null;
     initialHasMore: boolean;
     initialTotal: number;
 }
 
-const INITIAL_FILTERS: MemberFilterState = { q: '', role: null, skill: null, sort: 'followers' };
+const INITIAL_FILTERS: IUserFilterState = { q: '', role: null, skill: null, sort: 'followers' };
 
-const filterKey = (f: MemberFilterState) => `${f.q}|${f.role}|${f.skill}|${f.sort}`;
+const filterKey = (f: IUserFilterState) => `${f.q}|${f.role}|${f.skill}|${f.sort}`;
 
 const GRID = 'grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4';
 
-export default function Members({
-    initialMembers,
-    initialCursor,
-    initialHasMore,
-    initialTotal,
-}: MembersProps) {
-    const [members, setMembers] = useState<Member[]>(initialMembers);
+export default function Users({ initialUsers, initialCursor, initialHasMore, initialTotal }: IUsersProps) {
+    const [users, setUsers] = useState<IUserSummary[]>(initialUsers);
     const [cursor, setCursor] = useState<string | null>(initialCursor);
     const [hasMore, setHasMore] = useState(initialHasMore);
     const [total, setTotal] = useState<number | null>(initialTotal);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
     const [isFiltering, setIsFiltering] = useState(false);
-    const [filters, setFilters] = useState<MemberFilterState>(INITIAL_FILTERS);
+    const [filters, setFilters] = useState<IUserFilterState>(INITIAL_FILTERS);
 
     const sentinelRef = useRef<HTMLDivElement>(null);
     const isFetchingRef = useRef(false);
@@ -59,11 +54,11 @@ export default function Members({
         const requestId = ++requestIdRef.current;
         setIsFiltering(true);
 
-        memberService
-            .getMembers({ cursor: null, limit: PAGE_SIZE, ...filters })
+        userService
+            .getUsers({ cursor: null, limit: PAGE_SIZE, ...filters })
             .then((result) => {
                 if (requestId !== requestIdRef.current) return;
-                setMembers(result.items);
+                setUsers(result.items);
                 setCursor(result.nextCursor);
                 setHasMore(result.hasMore);
                 setTotal(result.total);
@@ -86,12 +81,12 @@ export default function Members({
         const requestId = requestIdRef.current;
 
         try {
-            const result = await memberService.getMembers({ cursor, limit: PAGE_SIZE, ...filters });
+            const result = await userService.getUsers({ cursor, limit: PAGE_SIZE, ...filters });
 
             // A filter change landed mid-flight — that response owns the list now.
             if (requestId === requestIdRef.current) {
-                setMembers((prev) => {
-                    const existingIds = new Set(prev.map((m) => m.id));
+                setUsers((prev) => {
+                    const existingIds = new Set(prev.map((u) => u.id));
                     return [...prev, ...result.items.filter((item) => !existingIds.has(item.id))];
                 });
                 setCursor(result.nextCursor);
@@ -151,15 +146,15 @@ export default function Members({
                 Find other builders, see what they ship, and follow the ones whose work you want to keep up with.
             </p>
 
-            <MemberFilters value={filters} onChange={setFilters} resultCount={total} isLoading={isFiltering} />
+            <UserFilters value={filters} onChange={setFilters} resultCount={total} isLoading={isFiltering} />
 
             {isFiltering ? (
                 <div className={GRID}>
                     {Array.from({ length: 8 }).map((_, i) => (
-                        <MemberCardSkeleton key={`filter-skeleton-${i}`} />
+                        <UserCardSkeleton key={`filter-skeleton-${i}`} />
                     ))}
                 </div>
-            ) : members.length === 0 ? (
+            ) : users.length === 0 ? (
                 <div className="rounded border border-dashed border-foreground/15 px-6 py-20 text-center">
                     <p className="text-sm font-medium">No members match these filters.</p>
                     <p className="mt-1.5 text-sm text-muted-foreground">
@@ -168,23 +163,15 @@ export default function Members({
                 </div>
             ) : (
                 <AnimatePresence mode="wait">
-                    <motion.div
-                        key={gridKey}
-                        variants={container}
-                        initial="hidden"
-                        animate="shown"
-                        className={GRID}
-                    >
-                        {members.map((member) => (
-                            <motion.div key={member.id} variants={piece}>
-                                <MemberCard member={member} />
+                    <motion.div key={gridKey} variants={container} initial="hidden" animate="shown" className={GRID}>
+                        {users.map((user) => (
+                            <motion.div key={user.id} variants={piece}>
+                                <UserCard user={user} />
                             </motion.div>
                         ))}
 
                         {isLoadingMore &&
-                            Array.from({ length: 4 }).map((_, i) => (
-                                <MemberCardSkeleton key={`more-skeleton-${i}`} />
-                            ))}
+                            Array.from({ length: 4 }).map((_, i) => <UserCardSkeleton key={`more-skeleton-${i}`} />)}
                     </motion.div>
                 </AnimatePresence>
             )}
