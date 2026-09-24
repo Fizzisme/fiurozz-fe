@@ -1,15 +1,16 @@
 // ============================================================
 // MOCK MESSAGES
 // Fixture cho dock nhắn tin khi backend chưa có endpoint. Hội thoại gắn
-// vào mockMembers để avatar và tên khớp với trang /members.
+// vào mockUsers để avatar và tên khớp với trang /members.
 // ============================================================
 
-import { mockMembers, type Member } from '@/mock-data/members';
+import { mockUsers, OCCUPATION_LABELS } from '@/mock-data/users';
+import { type IUserSummary } from '@/types/user';
 
 export interface DirectMessage {
     id: string;
     conversationId: string;
-    /** 'me' = người đang đăng nhập, 'them' = member bên kia */
+    /** 'me' = người đang đăng nhập, 'them' = user bên kia */
     from: 'me' | 'them';
     text: string;
     /** ISO date */
@@ -17,10 +18,10 @@ export interface DirectMessage {
 }
 
 export interface Conversation {
-    /** Trùng username của member -> địa chỉ ổn định, không cần id riêng */
+    /** Trùng displayName của user -> địa chỉ ổn định, không cần id riêng */
     id: string;
-    username: string;
-    name: string;
+    displayName: string;
+    fullName: string;
     avatar: string;
     role: string;
     lastMessage: string;
@@ -57,7 +58,7 @@ const THREADS: string[][] = [
 
 const HOURS_AGO = [1, 5, 26, 51, 120, 190];
 
-/** Băm xác định, cùng ý đồ với mock-data/members.ts */
+/** Băm xác định, cùng ý đồ với mock-data/users.ts */
 function hash(seed: number, salt: number): number {
     let x = Math.imul(seed + salt * 0x9e37, 0x85eb) ^ 0x27d4;
     x = Math.imul(x ^ (x >>> 15), 0xc2b2);
@@ -85,30 +86,30 @@ const conversations: Conversation[] = [];
 
 function seed() {
     for (let i = 0; i < CONVERSATION_COUNT; i += 1) {
-        const member = mockMembers[hash(i, 17) % mockMembers.length];
-        if (conversations.some((c) => c.id === member.username)) continue;
+        const user = mockUsers[hash(i, 17) % mockUsers.length];
+        if (conversations.some((c) => c.id === user.displayName)) continue;
 
         const thread = THREADS[i % THREADS.length];
         const startedAt = HOURS_AGO[i % HOURS_AGO.length] * 60;
 
         const items: DirectMessage[] = thread.map((text, index) => ({
-            id: `${member.username}-${index}`,
-            conversationId: member.username,
+            id: `${user.displayName}-${index}`,
+            conversationId: user.displayName,
             // Tin đầu luôn từ họ; sau đó xen kẽ
             from: index % 2 === 0 ? 'them' : 'me',
             text,
             sentAt: minutesBefore(startedAt - index * 7),
         }));
 
-        messagesByConversation.set(member.username, items);
+        messagesByConversation.set(user.displayName, items);
 
         const last = items[items.length - 1];
         conversations.push({
-            id: member.username,
-            username: member.username,
-            name: member.name,
-            avatar: member.avatar,
-            role: member.role,
+            id: user.displayName,
+            displayName: user.displayName,
+            fullName: user.fullName ?? user.displayName,
+            avatar: user.avatarUrl ?? '',
+            role: user.occupation ? OCCUPATION_LABELS[user.occupation] : '',
             lastMessage: last.text,
             lastAt: last.sentAt,
             unread: last.from === 'them' && i % 3 === 0 ? 1 + (hash(i, 31) % 3) : 0,
@@ -134,34 +135,34 @@ export function getMockMessages(conversationId: string): DirectMessage[] {
     return messagesByConversation.get(conversationId) ?? [];
 }
 
-function memberOf(username: string): Member | undefined {
-    return mockMembers.find((m) => m.username === username);
+function userOf(displayName: string): IUserSummary | undefined {
+    return mockUsers.find((u) => u.displayName === displayName);
 }
 
 /**
- * Mở hội thoại với một member. Chưa từng nhắn thì tạo một hội thoại rỗng
+ * Mở hội thoại với một user. Chưa từng nhắn thì tạo một hội thoại rỗng
  * thay vì trả về không có gì — dock cần một đối tượng để dựng cửa sổ.
  */
-export function ensureMockConversation(username: string): Conversation | null {
-    const existing = conversations.find((c) => c.id === username);
+export function ensureMockConversation(displayName: string): Conversation | null {
+    const existing = conversations.find((c) => c.id === displayName);
     if (existing) return existing;
 
-    const member = memberOf(username);
-    if (!member) return null;
+    const user = userOf(displayName);
+    if (!user) return null;
 
     const created: Conversation = {
-        id: member.username,
-        username: member.username,
-        name: member.name,
-        avatar: member.avatar,
-        role: member.role,
+        id: user.displayName,
+        displayName: user.displayName,
+        fullName: user.fullName ?? user.displayName,
+        avatar: user.avatarUrl ?? '',
+        role: user.occupation ? OCCUPATION_LABELS[user.occupation] : '',
         lastMessage: '',
         lastAt: new Date(EPOCH).toISOString(),
         unread: 0,
     };
 
     conversations.push(created);
-    messagesByConversation.set(member.username, []);
+    messagesByConversation.set(user.displayName, []);
     return created;
 }
 

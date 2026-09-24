@@ -17,8 +17,8 @@ export const messageService = {
         return getMessagesAction(conversationId);
     },
 
-    async openConversation(username: string): Promise<Conversation | null> {
-        return openConversationAction(username);
+    async openConversation(displayName: string): Promise<Conversation | null> {
+        return openConversationAction(displayName);
     },
 
     async send(conversationId: string, text: string): Promise<DirectMessage | null> {

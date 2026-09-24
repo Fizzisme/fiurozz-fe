@@ -44,13 +44,13 @@ export async function getMessagesAction(conversationId: string): Promise<DirectM
 }
 
 /**
- * Mở (hoặc tạo) hội thoại với một member. Dock gọi hàm này khi người dùng
+ * Mở (hoặc tạo) hội thoại với một user. Dock gọi hàm này khi người dùng
  * bấm Message trên một người chưa từng nhắn.
  */
-export async function openConversationAction(username: string): Promise<Conversation | null> {
+export async function openConversationAction(displayName: string): Promise<Conversation | null> {
     try {
         // TODO: real url
-        const envelope = await gatewayClient.post<Conversation>('/conversations', { username });
+        const envelope = await gatewayClient.post<Conversation>('/conversations', { displayName });
         if (envelope.data) return envelope.data;
     } catch (error) {
         if (error instanceof ApiError && error.payload) {
@@ -60,7 +60,7 @@ export async function openConversationAction(username: string): Promise<Conversa
     }
 
     // MockData
-    return ensureMockConversation(username);
+    return ensureMockConversation(displayName);
 }
 
 export async function sendMessageAction(conversationId: string, text: string): Promise<DirectMessage | null> {

@@ -36,11 +36,11 @@ export function initials(name: string): string {
         .toUpperCase();
 }
 
-export function PostAvatar({ author, className }: { author: Pick<PostAuthor, 'name' | 'avatar'>; className?: string }) {
+export function PostAvatar({ author, className }: { author: Pick<PostAuthor, 'fullName' | 'avatar'>; className?: string }) {
     return (
         <Avatar className={cn('size-9 rounded-full ring-1 ring-foreground/10', className)}>
             {author.avatar && <AvatarImage src={author.avatar} alt="" className="rounded-full" />}
-            <AvatarFallback className="rounded-full text-[11px] font-medium">{initials(author.name)}</AvatarFallback>
+            <AvatarFallback className="rounded-full text-[11px] font-medium">{initials(author.fullName)}</AvatarFallback>
         </Avatar>
     );
 }
@@ -183,7 +183,7 @@ export function PostQuoteCard({ quote, linked = true, className }: { quote: Post
         <>
             <span className="flex items-center gap-2">
                 <PostAvatar author={quote.author} className="size-5" />
-                <span className="truncate text-[13px] font-semibold">{quote.author.name}</span>
+                <span className="truncate text-[13px] font-semibold">{quote.author.fullName}</span>
                 <span className="text-[13px] text-muted-foreground" suppressHydrationWarning>
                     {compactTime(quote.createdAt)}
                 </span>
@@ -401,8 +401,8 @@ export function PostItem({ post, variant = 'feed', replyCount, onQuote, classNam
 
             <div className="min-w-0 flex-1">
                 <header className="flex items-baseline gap-1.5">
-                    <span className="truncate text-[15px] font-semibold">{post.author.name}</span>
-                    <span className="truncate font-mono text-[12px] text-muted-foreground">@{post.author.username}</span>
+                    <span className="truncate text-[15px] font-semibold">{post.author.fullName}</span>
+                    <span className="truncate font-mono text-[12px] text-muted-foreground">@{post.author.displayName}</span>
                     {!isFocus && (
                         <>
                             <span aria-hidden className="text-muted-foreground">
@@ -417,7 +417,7 @@ export function PostItem({ post, variant = 'feed', replyCount, onQuote, classNam
                 <div onClick={openThread} className={cn('space-y-3', !isFocus && 'cursor-pointer', isFocus ? 'mt-3' : 'mt-0.5')}>
                     <PostText text={post.text} className={isFocus ? 'text-[17px]' : undefined} />
                     {post.code && <PostCodeBlock code={post.code} />}
-                    <PostImages images={post.images} authorName={post.author.name} />
+                    <PostImages images={post.images} authorName={post.author.fullName} />
                     {post.project && <PostProjectCard project={post.project} />}
                     {post.quote && <PostQuoteCard quote={post.quote} />}
                 </div>

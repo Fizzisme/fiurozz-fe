@@ -11,19 +11,20 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/global/select';
-import { MEMBER_ROLES, MEMBER_SKILLS, MEMBER_SORTS, type MemberSort } from '@/mock-data/members';
+import { USER_ROLES, USER_SKILLS, USER_SORTS } from '@/mock-data/users';
+import { type UserSort } from '@/types/user';
 
-export interface MemberFilterState {
+export interface IUserFilterState {
     q: string;
     role: string | null;
     skill: string | null;
-    sort: MemberSort;
+    sort: UserSort;
 }
 
-interface MemberFiltersProps {
-    value: MemberFilterState;
-    onChange: (next: MemberFilterState) => void;
-    /** How many members the current filters match; null while the count is unknown. */
+interface IUserFiltersProps {
+    value: IUserFilterState;
+    onChange: (next: IUserFilterState) => void;
+    /** How many users the current filters match; null while the count is unknown. */
     resultCount: number | null;
     isLoading: boolean;
 }
@@ -61,7 +62,7 @@ function FilterChip({
     );
 }
 
-export default function MemberFilters({ value, onChange, resultCount, isLoading }: MemberFiltersProps) {
+export default function UserFilters({ value, onChange, resultCount, isLoading }: IUserFiltersProps) {
     // Local mirror so typing stays instant while the query is debounced upstream.
     const [draft, setDraft] = useState(value.q);
 
@@ -88,11 +89,11 @@ export default function MemberFilters({ value, onChange, resultCount, isLoading 
                         aria-hidden="true"
                         className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
                     />
-                    <label htmlFor="member-search" className="sr-only">
+                    <label htmlFor="user-search" className="sr-only">
                         Search members
                     </label>
                     <Input
-                        id="member-search"
+                        id="user-search"
                         type="search"
                         value={draft}
                         onChange={(e) => setDraft(e.target.value)}
@@ -120,7 +121,7 @@ export default function MemberFilters({ value, onChange, resultCount, isLoading 
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value={ALL}>Any skill</SelectItem>
-                        {MEMBER_SKILLS.map((skill) => (
+                        {USER_SKILLS.map((skill) => (
                             <SelectItem key={skill} value={skill}>
                                 {skill}
                             </SelectItem>
@@ -130,13 +131,13 @@ export default function MemberFilters({ value, onChange, resultCount, isLoading 
 
                 <Select
                     value={value.sort}
-                    onValueChange={(v) => onChange({ ...value, sort: v as MemberSort })}
+                    onValueChange={(v) => onChange({ ...value, sort: v as UserSort })}
                 >
                     <SelectTrigger className="w-full sm:w-[176px]" aria-label="Sort members">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        {MEMBER_SORTS.map((option) => (
+                        {USER_SORTS.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                                 {option.label}
                             </SelectItem>
@@ -152,7 +153,7 @@ export default function MemberFilters({ value, onChange, resultCount, isLoading 
                     pressed={value.role === null}
                     onClick={() => onChange({ ...value, role: null })}
                 />
-                {MEMBER_ROLES.map((role) => (
+                {USER_ROLES.map((role) => (
                     <FilterChip
                         key={role}
                         label={role}

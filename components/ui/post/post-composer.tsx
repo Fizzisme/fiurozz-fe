@@ -175,7 +175,7 @@ export function PostComposer({
 
     return (
         <form onSubmit={submit} noValidate className={cn('flex gap-3 py-4', className)}>
-            <PostAvatar author={{ name: user.fullName ?? user.displayName, avatar: user.avatarUrl }} />
+            <PostAvatar author={{ fullName: user.fullName ?? user.displayName, avatar: user.avatarUrl }} />
 
             <div className="min-w-0 flex-1">
                 <p className="text-[15px] font-semibold">{user.fullName ?? user.displayName}</p>
