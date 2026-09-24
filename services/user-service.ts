@@ -31,7 +31,7 @@ export const userService = {
         return getUserByDisplayNameAction(displayName);
     },
 
-    async setFollow(displayName: string, follow: boolean): Promise<IFollowResult> {
-        return setUserFollowAction(displayName, follow);
+    async setFollow(targetUserId: string, displayName: string, follow: boolean): Promise<IFollowResult> {
+        return setUserFollowAction(targetUserId, displayName, follow);
     },
 };

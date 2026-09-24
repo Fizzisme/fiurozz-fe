@@ -4,16 +4,20 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { format, isValid } from 'date-fns';
-import { BriefcaseBusiness, Building2, Cake, Globe, MapPin, Send} from 'lucide-react';
+import { BriefcaseBusiness, Building2, Cake, Globe, MapPin} from 'lucide-react';
+import {Send} from '@/components/animate-ui/icons/send'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/global/avatar';
 import { Button } from '@/components/animate-ui/components/buttons/button';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/animate-ui/components/radix/hover-card';
 import { OCCUPATION_LABELS } from '@/mock-data/users';
 import { type IUserSummary } from '@/types/user';
 import { userService } from '@/services/user-service';
 import { useMessageDockStore } from '@/lib/store/message-dock-store';
 import { useUserStore } from '@/lib/store/user-store';
+import { useIsTruncated } from '@/hooks/use-is-truncated';
 import { getInitials } from '@/lib/utils';
+import { AnimateIcon } from '@/components/animate-ui/icons/icon';
 
 interface IUserCardProps {
     user: IUserSummary;
@@ -57,6 +61,14 @@ function formatBirthday(iso: string): string | null {
     return isValid(date) ? format(date, 'MMM d, yyyy') : null;
 }
 
+function SkillChip({ skill }: { skill: string }) {
+    return (
+        <span className="shrink-0 rounded border border-foreground/10 px-2 py-0.5 font-mono text-[11px] text-muted-foreground">
+            {skill}
+        </span>
+    );
+}
+
 /**
  * The builder's calling card — the person-shaped sibling of the project
  * artifact, with the same bands and hover choreography.
@@ -79,6 +91,7 @@ export default function UserCard({ user, className }: IUserCardProps) {
 
     const openConversation = useMessageDockStore((state) => state.openConversation);
     const currentUser = useUserStore((state) => state.user);
+    const updateCurrentUser = useUserStore((state) => state.updateUser);
     const isInitialized = useUserStore((state) => state.isInitialized);
     const isOwnCard = currentUser?.id === user.id;
 
@@ -101,28 +114,44 @@ export default function UserCard({ user, className }: IUserCardProps) {
     };
 
     const [isFollowing, setIsFollowing] = useState(user.isFollowing ?? false);
-    const [followers, setFollowers] = useState(user.stats?.followers ?? 0);
+    const [followers, setFollowers] = useState(user.followersCount);
+    const following = user.followingCount
     const [isPending, startTransition] = useTransition();
+
+    // Bio is line-clamped to 2 lines; only wire up the "see full bio" hover
+    // once it actually cuts text off, so a short bio doesn't get a hover
+    // affordance that reveals nothing new.
+    const { ref: bioRef, isTruncated: isBioTruncated } = useIsTruncated<HTMLParagraphElement>();
 
     const toggleFollow = () => {
         if (blockedByAuth()) return;
 
         const next = !isFollowing;
         const previous = { isFollowing, followers };
+        const previousFollowingCount = currentUser?.followingCount;
 
         // Optimistic: the control answers immediately, then reconciles with
-        // whatever the server says the truth is.
+        // whatever the server says the truth is. This card only holds the
+        // TARGET's followers count -- the viewer's own followingCount lives
+        // on the shared user store, so it's bumped there or every other
+        // surface reading it (profile stats, header, ...) goes stale.
         setIsFollowing(next);
         setFollowers((n) => n + (next ? 1 : -1));
+        if (previousFollowingCount !== undefined) {
+            updateCurrentUser({ followingCount: previousFollowingCount + (next ? 1 : -1) });
+        }
 
         startTransition(async () => {
             try {
-                const result = await userService.setFollow(user.displayName, next);
+                const result = await userService.setFollow(user.id, user.displayName, next);
                 setIsFollowing(result.isFollowing);
-                setFollowers(result.followers);
+                setFollowers(result.followersCount);
             } catch {
                 setIsFollowing(previous.isFollowing);
                 setFollowers(previous.followers);
+                if (previousFollowingCount !== undefined) {
+                    updateCurrentUser({ followingCount: previousFollowingCount });
+                }
             }
         });
     };
@@ -134,7 +163,7 @@ export default function UserCard({ user, className }: IUserCardProps) {
             <div className="flex flex-1 flex-col px-4 pt-4 pb-4 sm:px-5 sm:pt-5">
                 {/* HEADER — portrait on the left, what you can do on the right */}
                 <div className="flex items-center justify-between gap-2">
-                    <Avatar className="size-12 rounded-full ring-1 ring-foreground/10 after:rounded-full">
+                    <Avatar className="size-12">
                         <AvatarImage
                             src={user.avatarUrl ?? undefined}
                             alt=""
@@ -156,7 +185,8 @@ export default function UserCard({ user, className }: IUserCardProps) {
                         </span>
                     ) : (
                         <div className="relative z-10 flex shrink-0 items-center gap-3">
-                            <Button
+                            <AnimateIcon animateOnHover>
+                                <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon-sm"
@@ -168,8 +198,9 @@ export default function UserCard({ user, className }: IUserCardProps) {
                                 title={`Message ${name}`}
                                 className="hover:bg-transparent"
                             >
-                                <Send className="size-6" />
+                                <Send className="size-6"/>
                             </Button>
+                            </AnimateIcon>
 
                             <Button
                                 type="button"
@@ -201,8 +232,22 @@ export default function UserCard({ user, className }: IUserCardProps) {
                     </p>
                 </div>
 
-                {/* THEIR LINE */}
-                <p className="mt-3 line-clamp-2 text-sm leading-relaxed text-foreground/80">{user.bio}</p>
+                {/* THEIR LINE — hover reveals the full bio once it's actually clipped */}
+                <HoverCard openDelay={150} closeDelay={100}>
+                    <HoverCardTrigger asChild>
+                        <p
+                            ref={bioRef}
+                            className="relative z-10 mt-3 line-clamp-2 text-sm leading-relaxed text-foreground/80"
+                        >
+                            {user.bio}
+                        </p>
+                    </HoverCardTrigger>
+                    {isBioTruncated && user.bio && (
+                        <HoverCardContent side="top" align="start" className="w-72">
+                            <p className="text-sm leading-relaxed text-foreground/80">{user.bio}</p>
+                        </HoverCardContent>
+                    )}
+                </HoverCard>
 
                 {/* FACTS */}
                 <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
@@ -218,15 +263,15 @@ export default function UserCard({ user, className }: IUserCardProps) {
                     {user.company && (
                         <span className="flex items-center gap-1.5">
                             <Building2 className="size-3.5 shrink-0" />
-                        <span className="truncate">{user.company}</span>
-                    </span>
+                            <span className="truncate">{user.company}</span>
+                        </span>
                     )}
 
                     {user.location && (
                         <span className="flex items-center gap-1.5">
                             <MapPin className="size-3.5 shrink-0" />
-                        <span className="truncate">{user.location}</span>
-                    </span>
+                            <span className="truncate">{user.location}</span>
+                        </span>
                     )}
 
                     {birthdayLabel && (
@@ -249,32 +294,52 @@ export default function UserCard({ user, className }: IUserCardProps) {
                     )}
                 </div>
 
-                {/* STACK — hairline mono chips, never filled; a run past three collapses */}
-                <div className="mt-auto flex flex-nowrap items-center gap-2 pt-4">
-                    {visible.map((skill) => (
-                        <span
-                            key={skill}
-                            className="shrink-0 rounded border border-foreground/10 px-2 py-0.5 font-mono text-[11px] text-muted-foreground"
-                        >
-                            {skill}
-                        </span>
-                    ))}
-                    {overflow > 0 && (
-                        <span className="shrink-0 font-mono text-[11px] text-muted-foreground/70">+{overflow}</span>
-                    )}
-                </div>
+                {/* STACK — hairline mono chips, never filled; a run past three collapses.
+                    Hovering the row when it has overflowed reveals the rest instead of just counting them. */}
+                {overflow > 0 ? (
+                    <HoverCard openDelay={150} closeDelay={100}>
+                        <HoverCardTrigger asChild>
+                            <div className="relative z-10 mt-auto flex flex-nowrap items-center gap-2 pt-4">
+                                {visible.map((skill) => (
+                                    <SkillChip key={skill} skill={skill} />
+                                ))}
+                                <span className="shrink-0 font-mono text-[11px] text-muted-foreground/70">+{overflow}</span>
+                            </div>
+                        </HoverCardTrigger>
+                        <HoverCardContent side="top" align="start" className="w-64">
+                            <div className="flex flex-wrap gap-2">
+                                {user.skills.map((skill) => (
+                                    <SkillChip key={skill} skill={skill} />
+                                ))}
+                            </div>
+                        </HoverCardContent>
+                    </HoverCard>
+                ) : (
+                    <div className="mt-auto flex flex-nowrap items-center gap-2 pt-4">
+                        {visible.map((skill) => (
+                            <SkillChip key={skill} skill={skill} />
+                        ))}
+                    </div>
+                )}
             </div>
 
-            {/* FOOTER — what they have shipped (hidden until BE exposes real counts) */}
-            {user.stats && (
-                <div className="border-t border-foreground/10 px-4 py-3 sm:px-5">
-                    <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
-                        {countLabel(user.stats.projects, 'project')}
-                        <span className="mx-1.5 text-foreground/20">·</span>
-                        {countLabel(followers, 'follower')}
-                    </p>
-                </div>
-            )}
+            {/* FOOTER — followers is real; the project count is mock-only decoration
+                (the user-service doesn't expose it yet) so it's dropped, not faked, once stats is gone */}
+            <div className="border-t border-foreground/10 px-4 py-3 sm:px-5">
+                <p className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                    {user.stats && (
+                        <>
+                            {countLabel(user.stats.projects, 'project')}
+                            <span className="mx-1.5 text-foreground/20">·</span>
+                        </>
+                    )}
+                    {countLabel(followers, 'follower')}
+                    <span className="mx-1.5 text-foreground/20">·</span>
+
+                    {isOwnCard ? `${formatCount(currentUser!.followingCount)} following` : `${formatCount(following)} following`}
+
+                </p>
+            </div>
         </div>
     );
 }

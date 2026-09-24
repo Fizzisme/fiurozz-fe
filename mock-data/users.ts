@@ -199,11 +199,11 @@ function generateMockUsers(): IUserSummary[] {
             skills: pickSkills(index, 3 + (hash(index, 71) % 3)),
             birthday: new Date(2000 + (index % 6), index % 12, ((index * 3) % 28) + 1).toISOString(),
             createdAt: new Date(2024, index % 12, ((index * 2) % 28) + 1).toISOString(),
+            followersCount: 12 + ((index * 37) % 1800),
+            followingCount: 5 + ((index * 13) % 400),
             isFollowing: hash(index, 137) % 4 === 0,
             stats: {
                 projects: 1 + ((index * 5) % 24),
-                followers: 12 + ((index * 37) % 1800),
-                following: 5 + ((index * 13) % 400),
                 likes: 20 + ((index * 29) % 2400),
             },
         };
@@ -229,7 +229,7 @@ export function setMockFollow(displayName: string, isFollowing: boolean): IUserS
     if (!user || user.isFollowing === isFollowing) return user;
 
     user.isFollowing = isFollowing;
-    if (user.stats) user.stats.followers += isFollowing ? 1 : -1;
+    user.followersCount += isFollowing ? 1 : -1;
     return user;
 }
 
@@ -247,7 +247,7 @@ export const USER_SORTS: { value: UserSort; label: string }[] = [
 ];
 
 const SORTERS: Record<UserSort, (a: IUserSummary, b: IUserSummary) => number> = {
-    followers: (a, b) => (b.stats?.followers ?? 0) - (a.stats?.followers ?? 0),
+    followers: (a, b) => b.followersCount - a.followersCount,
     projects: (a, b) => (b.stats?.projects ?? 0) - (a.stats?.projects ?? 0),
     recent: (a, b) => b.createdAt.localeCompare(a.createdAt),
     name: (a, b) => (a.fullName ?? a.displayName).localeCompare(b.fullName ?? b.displayName),

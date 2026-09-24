@@ -56,19 +56,27 @@ export interface IUser {
     birthday?: string | null;
 
     createdAt: string;
+
+    /** Denormalized off UserStats — always present on a real response (defaults to 0 server-side). */
+    followersCount: number;
+    followingCount: number;
 }
 
+/**
+ * Aggregates the real user-service does NOT return yet (no project or like
+ * count exists there). Mock-only decoration for the directory card footer —
+ * a real response leaves this undefined.
+ */
 export interface IUserStats {
     projects: number;
-    followers: number;
-    following: number;
     likes: number;
 }
 
 /**
- * IUser plus the aggregates the directory UI shows. Both are optional because
- * the real user-service has no follower/project/like counts and no follow-state
- * yet: responses from it leave them undefined, only the fixture fills them.
+ * IUser plus the directory UI's extras. `stats` is optional because it's
+ * mock-only (see above); `isFollowing` is optional because the real
+ * user-service doesn't report follow-state on this endpoint yet, only the
+ * fixture fills it.
  */
 export interface IUserSummary extends IUser {
     stats?: IUserStats;
@@ -98,26 +106,21 @@ export interface IUserSettings {
     theme: string;
 }
 
-export interface ICurrentUser {
-    id: string;
+/**
+ * Reuses IUser for the fields that are identical, and overrides the ones
+ * that aren't: `/me` always has an email and a birthday (nothing to hide
+ * from yourself) and mirrors occupation/gender as loose strings rather
+ * than the public endpoint's enums.
+ */
+export interface ICurrentUser extends Omit<IUser, 'email' | 'occupation' | 'gender' | 'birthday'> {
     email: string;
-    displayName: string;
-    fullName: string | null;
-    avatarUrl: string | null;
-    coverUrl: string | null;
-    bio: string | null;
     occupation: string | null;
-    company: string | null;
-    location: string | null;
-    birthday: string | null;
-    website: string | null;
     gender: string;
-    skills: string[];
+    birthday: string | null;
     language: string;
     timezone: string;
     settings: IUserSettings | null;
     links: ISocialLink[];
-    createdAt: string;
 }
 
 // ============================================================
@@ -149,9 +152,11 @@ export interface IUsersCursorPage {
     total: number;
 }
 
+/** POST/DELETE :id/follow response — follow state plus the target's refreshed counts. */
 export interface IFollowResult {
     isFollowing: boolean;
-    followers: number;
+    followersCount: number;
+    followingCount: number;
 }
 
 /**

@@ -69,9 +69,14 @@ export async function updateCurrentUserAction(
 }
 
 // GET /api/users answers with IUsersCursorPage as-is: the User Service DTO
-// matches IUser field for field, so there is nothing to map. stats/isFollowing
-// simply stay undefined — the service has no follower/like counts yet.
+// matches IUser field for field (including followersCount/followingCount),
+// so there is nothing to map. stats/isFollowing simply stay undefined — the
+// service has no project/like counts or follow-state on this endpoint yet.
 export async function getUsersCursorPageAction(query: IUsersQueries = {}): Promise<IUsersCursorPage> {
+
+    const cookieStore = await cookies();
+    const accessToken = cookieStore.get('accessToken')?.value;
+
     try {
         const envelope = await gatewayClient.get<IUsersCursorPage>('/api/users/', {
             query: {
@@ -81,6 +86,7 @@ export async function getUsersCursorPageAction(query: IUsersQueries = {}): Promi
                 skills: query.skill ?? undefined,
                 sort: query.sort ?? undefined,
             },
+            headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
         });
 
         return envelope.data ?? EMPTY_PAGE;
@@ -109,19 +115,31 @@ export async function getUserByDisplayNameAction(displayName: string): Promise<I
     }
 }
 
-export async function setUserFollowAction(displayName: string, follow: boolean): Promise<IFollowResult> {
-    try {
-        // TODO: real url
-        const path = `/api/users/${displayName}/follow`;
-        const envelope = follow
-            ? await gatewayClient.post<IFollowResult>(path)
-            : await gatewayClient.delete<IFollowResult>(path);
+// :id in the path is the TARGET user's id, not the caller's — the
+// caller's id is derived by the Gateway/User Service from the bearer
+// token, same as every other authenticated endpoint.
+export async function setUserFollowAction(
+    targetUserId: string,
+    displayName: string,
+    follow: boolean,
+): Promise<IFollowResult> {
+    const cookieStore = await cookies();
+    const accessToken = cookieStore.get('accessToken')?.value;
 
-        if (envelope.data) return envelope.data;
-    } catch (error) {
-        if (error instanceof ApiError && error.payload) {
-            const envelope = error.payload as { data?: IFollowResult };
+    if (accessToken) {
+        try {
+            const path = `/api/users/${targetUserId}/follow`;
+            const headers = { Authorization: `Bearer ${accessToken}` };
+            const envelope = follow
+                ? await gatewayClient.post<IFollowResult>(path, undefined, { headers })
+                : await gatewayClient.delete<IFollowResult>(path, { headers });
+
             if (envelope.data) return envelope.data;
+        } catch (error) {
+            if (error instanceof ApiError && error.payload) {
+                const envelope = error.payload as { data?: IFollowResult };
+                if (envelope.data) return envelope.data;
+            }
         }
     }
 
@@ -129,6 +147,7 @@ export async function setUserFollowAction(displayName: string, follow: boolean):
     const user = setMockFollow(displayName, follow);
     return {
         isFollowing: user?.isFollowing ?? follow,
-        followers: user?.stats?.followers ?? 0,
+        followersCount: user?.followersCount ?? 0,
+        followingCount: user?.followingCount ?? 0,
     };
 }
