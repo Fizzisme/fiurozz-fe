@@ -1,5 +1,14 @@
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/animate-ui/components/radix/hover-card';
-import Image from 'next/image';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/global/avatar';
+
+// "Nguyen Le Tuan Phi" -> "NP"; shown while the image loads or when it is missing.
+function initials(name: string) {
+    const words = name.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return '?';
+    const first = words[0][0];
+    const last = words.length > 1 ? words[words.length - 1][0] : '';
+    return (first + last).toUpperCase();
+}
 
 interface AuthorCardProps {
     name: string;
@@ -26,13 +35,20 @@ export default function AuthorCard({
     alignOffset = 0,
     followCursor = false,
 }: AuthorCardProps) {
-    const avatarUrl = avatar || '/default-avatar.png';
+    const fallback = initials(name);
 
     return (
         <HoverCard followCursor={followCursor}>
             <HoverCardTrigger asChild>
-                <button className="size-12 border rounded-full overflow-hidden hover:opacity-80 transition">
-                    <Image src={avatarUrl} alt={name} width={100} height={100} className="object-cover" />
+                <button
+                    type="button"
+                    aria-label={`About ${name}`}
+                    className="cursor-pointer rounded-full transition-opacity hover:opacity-80"
+                >
+                    <Avatar className="size-12">
+                        {avatar && <AvatarImage src={avatar} alt={name}/>}
+                        <AvatarFallback className="rounded-full font-medium">{fallback}</AvatarFallback>
+                    </Avatar>
                 </button>
             </HoverCardTrigger>
 
@@ -44,13 +60,10 @@ export default function AuthorCard({
                 className="w-80"
             >
                 <div className="flex flex-col gap-4">
-                    <Image
-                        className="size-16 rounded-full overflow-hidden border"
-                        src={avatarUrl}
-                        alt={name}
-                        width={80}
-                        height={80}
-                    />
+                    <Avatar className="size-16">
+                        {avatar && <AvatarImage src={avatar} alt={name} />}
+                        <AvatarFallback className="text-lg font-medium">{fallback}</AvatarFallback>
+                    </Avatar>
 
                     <div className="flex flex-col gap-3">
                         <div>

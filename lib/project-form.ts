@@ -18,6 +18,15 @@ export const FEATURES_MAX_ITEMS = 30;
 export const FEATURE_ITEM_MAX = 200;
 export const TAGS_MAX = 10;
 
+// Media limits from BE (multipart POST /api/projects). BE re-checks the real file content.
+export const IMAGES_MIN = 3;
+export const IMAGES_MAX = 5;
+export const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+export const VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+export const MEDIA_TOTAL_MAX_BYTES = 80 * 1024 * 1024;
+export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const;
+export const VIDEO_TYPES = ['video/mp4', 'video/webm'] as const;
+
 // https://github.com/owner/repo, optionally with a trailing slash or .git
 export const GITHUB_REPO_PATTERN = /^https?:\/\/(www\.)?github\.com\/[A-Za-z0-9-]+\/[A-Za-z0-9._-]+?(\.git)?\/?$/;
 
@@ -141,6 +150,42 @@ export function toCreateProjectPayload(data: ProjectFormData): CreateProjectPayl
     };
 }
 
+export type MediaErrors = { images?: string; video?: string };
+
+const formatMb = (bytes: number) => `${bytes / 1024 / 1024}MB`;
+
+// Checks a single picked file; used by the picker as soon as the user chooses it.
+export function validateImageFile(file: File): string | undefined {
+    if (!(IMAGE_TYPES as readonly string[]).includes(file.type)) {
+        return `${file.name}: use JPG, PNG, WebP or GIF.`;
+    }
+    if (file.size > IMAGE_MAX_BYTES) return `${file.name}: images must be at most ${formatMb(IMAGE_MAX_BYTES)}.`;
+}
+
+export function validateVideoFile(file: File): string | undefined {
+    if (!(VIDEO_TYPES as readonly string[]).includes(file.type)) return `${file.name}: use MP4 or WebM.`;
+    if (file.size > VIDEO_MAX_BYTES) return `${file.name}: video must be at most ${formatMb(VIDEO_MAX_BYTES)}.`;
+}
+
+// Whole-form check at submit: counts, per-file rules and the 80MB request cap.
+export function validateMedia(images: File[], video?: File): MediaErrors {
+    const errors: MediaErrors = {};
+
+    if (images.length < IMAGES_MIN || images.length > IMAGES_MAX) {
+        errors.images = `Add between ${IMAGES_MIN} and ${IMAGES_MAX} images.`;
+    } else {
+        errors.images = images.map(validateImageFile).find(Boolean);
+    }
+    if (video) errors.video = validateVideoFile(video);
+
+    const total = images.reduce((sum, file) => sum + file.size, video?.size ?? 0);
+    if (!errors.images && !errors.video && total > MEDIA_TOTAL_MAX_BYTES) {
+        errors.images = `Total upload must be at most ${formatMb(MEDIA_TOTAL_MAX_BYTES)}.`;
+    }
+
+    return errors;
+}
+
 export function getFieldErrors(error: z.ZodError): ProjectFormErrors {
     const fieldErrors: ProjectFormErrors = {};
     error.issues.forEach((issue) => {
@@ -165,12 +210,13 @@ const SERVER_FIELD_MAP: Record<string, keyof ProjectFormData> = {
     tagIds: 'tags',
 };
 
-export function getServerFieldErrors(errors: unknown): ProjectFormErrors {
-    const fieldErrors: ProjectFormErrors = {};
+export function getServerFieldErrors(errors: unknown): ProjectFormErrors & MediaErrors {
+    const fieldErrors: ProjectFormErrors & MediaErrors = {};
     if (!errors || typeof errors !== 'object') return fieldErrors;
 
     Object.entries(errors as Record<string, unknown>).forEach(([serverField, value]) => {
-        const field = SERVER_FIELD_MAP[serverField.split(/[.[]/)[0]];
+        const key = serverField.split(/[.[]/)[0];
+        const field = key === 'images' || key === 'video' ? key : SERVER_FIELD_MAP[key];
         const message = Array.isArray(value) ? value[0] : value;
         if (field && typeof message === 'string' && !fieldErrors[field]) {
             fieldErrors[field] = message;

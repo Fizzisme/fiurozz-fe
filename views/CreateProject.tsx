@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { FolderPlus, Globe, Layers, Shapes } from 'lucide-react';
+import { FolderPlus, Globe, Image as ImageIcon, Layers, Shapes } from 'lucide-react';
 
 import { Button } from '@/components/animate-ui/components/buttons/button';
 import { Input } from '@/components/ui/global/input';
@@ -16,6 +16,7 @@ import { AnimateIcon } from '@/components/animate-ui/icons/icon';
 import Github from '@/components/icons/github';
 import CategoryIcon from '@/components/ui/project/category-icon';
 import ChipInput from '@/components/ui/project/chip-input';
+import MediaPicker from '@/components/ui/project/media-picker';
 import TagPicker from '@/components/ui/project/tag-picker';
 import { projectService, type ProjectCategoryTree } from '@/services/project-service';
 import {
@@ -39,6 +40,8 @@ import {
     getServerFieldErrors,
     projectFormSchema,
     toCreateProjectPayload,
+    validateMedia,
+    type MediaErrors,
     type ProjectFormData,
     type ProjectFormErrors,
 } from '@/lib/project-form';
@@ -86,6 +89,9 @@ export default function CreateProject({ categories }: { categories: ProjectCateg
     const [formData, setFormData] = React.useState<ProjectFormData>(EMPTY_PROJECT_FORM);
     const [errors, setErrors] = React.useState<ProjectFormErrors>({});
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const [images, setImages] = React.useState<File[]>([]);
+    const [video, setVideo] = React.useState<File | undefined>();
+    const [mediaErrors, setMediaErrors] = React.useState<MediaErrors>({});
 
     const subCategories = categories.find((category) => category.id === formData.categoryId)?.subCategories ?? [];
 
@@ -105,24 +111,32 @@ export default function CreateProject({ categories }: { categories: ProjectCateg
         e.preventDefault();
 
         const parsed = projectFormSchema.safeParse(formData);
-        if (!parsed.success) {
-            setErrors(getFieldErrors(parsed.error));
+        const fieldErrors = parsed.success ? {} : getFieldErrors(parsed.error);
+        const mediaErrors = validateMedia(images, video);
+        if (!parsed.success || mediaErrors.images || mediaErrors.video) {
+            setErrors(fieldErrors);
+            setMediaErrors(mediaErrors);
             return;
         }
 
         setIsSubmitting(true);
         // The button just stays disabled (no label swap); the loading state itself is
         // this toast, which then resolves in place into the success or error toast.
-        const toastId = toast.loading('Creating your draft…');
-        const result = await projectService.createProject(toCreateProjectPayload(parsed.data));
+        const toastId = toast.loading('Uploading your project…');
+        const result = await projectService.createProject(toCreateProjectPayload(parsed.data), { images, video });
         setIsSubmitting(false);
 
         if (!result.success || !result.data) {
             // BE validation messages come back per field and land under the matching input.
-            const serverErrors = getServerFieldErrors((result as { errors?: unknown }).errors);
+            // The picked files stay in state, so a 503 can simply be retried.
+            const { images: imagesError, video: videoError, ...serverErrors } = getServerFieldErrors(
+                (result as { errors?: unknown }).errors,
+            );
             setErrors(serverErrors);
+            setMediaErrors({ images: imagesError, video: videoError });
+            const hasFieldErrors = Object.keys(serverErrors).length > 0 || !!imagesError || !!videoError;
             toast.error(
-                Object.keys(serverErrors).length > 0
+                hasFieldErrors
                     ? 'Some fields need attention.'
                     : result.message || 'Could not create the project.',
                 { id: toastId },
@@ -239,7 +253,40 @@ export default function CreateProject({ categories }: { categories: ProjectCateg
                 </Card>
 
                 {/* ============================================================ */}
-                {/* CATEGORY & TAGS                                               */}
+                {/* MEDIA                                                         */}
+                {/* ============================================================ */}
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-xl text-[#52514e] dark:text-[#c3c2b7]">
+                            <ImageIcon className="h-5 w-5" />
+                            Media
+                        </CardTitle>
+                        <CardDescription>Screenshots and an optional demo video.</CardDescription>
+                    </CardHeader>
+
+                    <CardContent>
+                        <MediaPicker
+                            images={images}
+                            video={video}
+                            onImagesChange={(next) => {
+                                setImages(next);
+                                setMediaErrors((prev) => ({ ...prev, images: undefined }));
+                            }}
+                            onVideoChange={(next) => {
+                                setVideo(next);
+                                setMediaErrors((prev) => ({ ...prev, video: undefined }));
+                            }}
+                            imagesError={mediaErrors.images}
+                            videoError={mediaErrors.video}
+                            onPickError={(field, message) => setMediaErrors((prev) => ({ ...prev, [field]: message }))}
+                            disabled={isSubmitting}
+                        />
+                    </CardContent>
+                </Card>
+
+                {/* ============================================================ */}
+                {/* CATEGORY & TAGS                                              */}
                 {/* ============================================================ */}
 
                 <Card>
@@ -386,7 +433,7 @@ export default function CreateProject({ categories }: { categories: ProjectCateg
                 </Card>
 
                 {/* ============================================================ */}
-                {/* LINKS                                                         */}
+                {/* LINKS                                                     */}
                 {/* ============================================================ */}
 
                 <Card>
