@@ -625,8 +625,8 @@ export default function Edit() {
                             />
                         </div>
 
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between text-[#52514e] dark:text-[#c3c2b7]">
+                        <div className="space-y-2 text-[#52514e] dark:text-[#c3c2b7]">
+                            <div className="flex items-center justify-between">
                                 <Label>Bio / headline</Label>
                                 <span className="text-xs text-muted-foreground">
                                     {fields.bio.length}/{BIO_MAX_LENGTH}
