@@ -162,9 +162,11 @@ export interface IFollowResult {
 /**
  * Body for PATCH /api/users/me, mirroring the User Service's UpdateProfileDto.
  * Partial update: omit a field to leave it untouched. Note the DTO has no
- * displayName, links or settings — those are not editable through this endpoint.
+ * links or settings — those are not editable through this endpoint.
  */
 export interface IUpdateCurrentUserPayload {
+    /** min 3, max 255 — the public handle; the BE rejects it if already taken */
+    displayName?: string;
     /** max 150 */
     fullName?: string;
     /** must be a valid URL — an empty string fails validation */

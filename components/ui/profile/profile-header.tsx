@@ -9,6 +9,7 @@ import { getInitials } from '@/lib/utils';
 import Image from 'next/image';
 import { TooltipContent, TooltipTrigger, Tooltip } from '@/components/animate-ui/components/animate/tooltip';
 import Link from 'next/link';
+import ImageViewer from '@/components/ui/profile/image-viewer';
 
 type PlatformIcon = React.ComponentType<{
     className?: string;
@@ -63,31 +64,48 @@ function SocialLinks({ links }: { links: ISocialLink[] }) {
 }
 
 export default function ProfileHeader({ user }: { user: ICurrentUser }) {
+    const avatar = (
+        <Avatar className="h-24 w-24 sm:h-32 sm:w-32">
+            <AvatarImage src={user.avatarUrl ?? undefined} alt={user.displayName} />
+            <AvatarFallback className="text-2xl">{getInitials(user.fullName ?? user.displayName)}</AvatarFallback>
+        </Avatar>
+    );
+
     return (
         <div className="overflow-hidden rounded border bg-sidebar">
             {/* Cover */}
             <div className="relative h-32 w-full bg-muted sm:h-48">
                 {user.coverUrl && (
-                    <Image
+                    <ImageViewer
                         src={user.coverUrl}
-                        alt=""
-                        fill
-                        priority
-                        sizes="(max-width: 640px) 100vw, 768px"
-                        className="object-cover"
-                    />
+                        alt={`${user.displayName}'s cover`}
+                        className="absolute inset-0 block size-full rounded-none"
+                    >
+                        <Image
+                            src={user.coverUrl}
+                            alt=""
+                            fill
+                            priority
+                            // BE-hosted files (MinIO) are not in images.remotePatterns, so skip the optimizer.
+                            unoptimized
+                            sizes="(max-width: 640px) 100vw, 768px"
+                            className="object-cover"
+                        />
+                    </ImageViewer>
                 )}
             </div>
 
             <div className="flex flex-col gap-4 px-4 pb-4 sm:px-6 sm:pb-6">
                 {/* Avatar + action row */}
                 <div className="-mt-12 flex items-end justify-between sm:-mt-16">
-                    <Avatar className="h-24 w-24 sm:h-32 sm:w-32">
-                        <AvatarImage src={user.avatarUrl ?? undefined} alt={user.displayName} />
-                        <AvatarFallback className="text-2xl">
-                            {getInitials(user.fullName ?? user.displayName)}
-                        </AvatarFallback>
-                    </Avatar>
+                    {/* Nothing to enlarge until the user has uploaded an avatar. */}
+                    {user.avatarUrl ? (
+                        <ImageViewer src={user.avatarUrl} alt={`${user.displayName}'s avatar`} className="block">
+                            {avatar}
+                        </ImageViewer>
+                    ) : (
+                        avatar
+                    )}
                     <Tooltip>
                         <TooltipTrigger>
                             <Button
@@ -113,7 +131,11 @@ export default function ProfileHeader({ user }: { user: ICurrentUser }) {
                     <p className="text-sm text-muted-foreground">@{user.displayName}</p>
                 </div>
 
-                {user.bio && <p className="max-w-2xl text-[15px] leading-relaxed">{user.bio}</p>}
+                {user.bio && (
+                    <p className="max-w-2xl text-[15px] leading-relaxed text-[#52514e] dark:text-[#c3c2b7]">
+                        {user.bio}
+                    </p>
+                )}
 
                 {/* Meta row: location / website / birthday / joined */}
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">

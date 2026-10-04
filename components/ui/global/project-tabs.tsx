@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/global/separator';
 
 function DetailRow({ icon: Icon, children }: { icon: typeof Briefcase; children: React.ReactNode }) {
     return (
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-3 text-sm text-[#52514e] dark:text-[#c3c2b7]">
             <Icon className="size-4 shrink-0 text-muted-foreground" />
             <span>{children}</span>
         </div>
@@ -43,7 +43,8 @@ export default function ProjectTabs({ user }: { user: ICurrentUser }) {
     const nothingToShowYet = !hasPosition && !showEmail;
 
     return (
-        <Card>
+        // bg-sidebar: same surface as the profile header above it (Card's default resolves to bg-card).
+        <Card className="bg-sidebar">
             <CardHeader>
                 <CardTitle className="text-base text-[#52514e] dark:text-[#c3c2b7]">About</CardTitle>
             </CardHeader>

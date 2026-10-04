@@ -95,9 +95,9 @@ const BIO_MAX_LENGTH = 220;
 /*                              Form value type                               */
 /* -------------------------------------------------------------------------- */
 
-// Mirrors UpdateProfileDto, so everything here is actually savable. displayName
-// is deliberately absent: PATCH /api/users/me does not accept it.
+// Mirrors UpdateProfileDto, so everything here is actually savable.
 type EditableFields = {
+    displayName: string;
     fullName: string;
     bio: string;
     occupation: Occupation | '';
@@ -114,6 +114,11 @@ type EditableFields = {
 /** Matches the DTO's @ArrayMaxSize(20) / @MaxLength(50, { each: true }). */
 const MAX_SKILLS = 20;
 const SKILL_MAX_LENGTH = 50;
+/** User Service MAX_AVATAR_BYTES / MAX_COVER_BYTES: 11 MB (11534336 bytes) for both. */
+const PROFILE_IMAGE_MAX_BYTES = 11 * 1024 * 1024;
+/** Same bounds as the register form. */
+const DISPLAY_NAME_MIN_LENGTH = 3;
+const DISPLAY_NAME_MAX_LENGTH = 255;
 
 export default function Edit() {
     const user = useUserStore((state) => state.user);
@@ -130,10 +135,15 @@ export default function Edit() {
     const [birthdayOpen, setBirthdayOpen] = React.useState(false);
     const [birthdayError, setBirthdayError] = React.useState('');
 
+    const [displayNameError, setDisplayNameError] = React.useState('');
+
     const [skillInput, setSkillInput] = React.useState('');
 
     const [avatarPreview, setAvatarPreview] = React.useState<string | null>(null);
     const [coverPreview, setCoverPreview] = React.useState<string | null>(null);
+    // The picked files, uploaded on Save; the previews above are just blob: URLs of them.
+    const [avatarFile, setAvatarFile] = React.useState<File | null>(null);
+    const [coverFile, setCoverFile] = React.useState<File | null>(null);
 
     const [saving, setSaving] = React.useState(false);
 
@@ -152,6 +162,7 @@ export default function Edit() {
             user.occupation && user.occupation in OCCUPATION_LABELS ? (user.occupation as Occupation) : '';
 
         const loaded: EditableFields = {
+            displayName: user.displayName ?? '',
             fullName: user.fullName ?? '',
             bio: user.bio ?? '',
             occupation,
@@ -226,13 +237,54 @@ export default function Edit() {
     function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
         if (!file) return;
+        if (file.size > PROFILE_IMAGE_MAX_BYTES) {
+            toast.error('Avatar must be at most 11MB.');
+            e.target.value = '';
+            return;
+        }
+        setAvatarFile(file);
         setAvatarPreview(URL.createObjectURL(file));
     }
 
     function handleCoverChange(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
         if (!file) return;
+        if (file.size > PROFILE_IMAGE_MAX_BYTES) {
+            toast.error('Cover must be at most 11MB.');
+            e.target.value = '';
+            return;
+        }
+        setCoverFile(file);
         setCoverPreview(URL.createObjectURL(file));
+    }
+
+    // The upload answers are not relied on: re-read /me so the store (header, profile) gets the new URLs.
+    async function refreshUser() {
+        const me = await userService.getMe();
+        if (me) updateUser(me);
+    }
+
+    async function handleRemoveImage(kind: 'avatar' | 'cover') {
+        setSaving(true);
+        const toastId = toast.loading(`Removing your ${kind}…`);
+
+        const result = await (kind === 'avatar' ? userService.deleteAvatar() : userService.deleteCover());
+        if (!result.ok) {
+            toast.error(result.message, { id: toastId });
+            setSaving(false);
+            return;
+        }
+
+        await refreshUser();
+        if (kind === 'avatar') {
+            setAvatarFile(null);
+            setAvatarPreview(null);
+        } else {
+            setCoverFile(null);
+            setCoverPreview(null);
+        }
+        toast.success(`Your ${kind} was removed.`, { id: toastId });
+        setSaving(false);
     }
 
     function addLink() {
@@ -307,6 +359,7 @@ export default function Edit() {
         const payload: IUpdateCurrentUserPayload = {};
         const clearedFields: string[] = [];
 
+        if (current.displayName !== saved.displayName) payload.displayName = current.displayName;
         if (current.fullName !== saved.fullName) payload.fullName = current.fullName;
         if (current.bio !== saved.bio) payload.bio = current.bio;
         if (current.company !== saved.company) payload.company = current.company;
@@ -350,12 +403,19 @@ export default function Edit() {
             return;
         }
 
-        // TODO: avatar/cover go through a real upload endpoint once it exists —
-        // avatarPreview/coverPreview here are local blob: URLs, not something
-        // the User Service could store, so they are never sent in the PATCH body.
+        const displayName = fields.displayName.trim();
+        if (displayName.length < DISPLAY_NAME_MIN_LENGTH) {
+            setDisplayNameError(`Display name must be at least ${DISPLAY_NAME_MIN_LENGTH} characters`);
+            return;
+        }
+        const current: EditableFields = { ...fields, displayName };
 
-        const { payload, clearedFields } = buildUpdatePayload(savedRef.current, fields);
-        if (Object.keys(payload).length === 0) {
+        // avatar/cover are not part of the PATCH body: they are separate multipart uploads
+        // (avatarPreview/coverPreview are only local blob: URLs).
+
+        const { payload, clearedFields } = buildUpdatePayload(savedRef.current, current);
+        const hasPayload = Object.keys(payload).length > 0;
+        if (!hasPayload && !avatarFile && !coverFile) {
             if (clearedFields.length > 0) {
                 toast.error(`Clearing ${clearedFields.join(', ')} isn't supported yet — leave a value or reload to discard.`);
             } else {
@@ -368,32 +428,67 @@ export default function Edit() {
         const toastId = toast.loading('Saving your profile…');
 
         try {
-            const result = await userService.updateMe(payload);
-            if (!result.ok) {
-                toast.error(result.message, { id: toastId });
-                return;
+            // Text (PATCH, JSON) and each image (multipart) are independent requests, so they
+            // run together instead of queueing. None of them rejects: a failure comes back as { ok: false }.
+            const [textResult, avatarResult, coverResult] = await Promise.all([
+                hasPayload ? userService.updateMe(payload) : null,
+                avatarFile
+                    ? user?.avatarUrl
+                        ? userService.replaceAvatar(avatarFile)
+                        : userService.uploadAvatar(avatarFile)
+                    : null,
+                coverFile
+                    ? user?.coverUrl
+                        ? userService.replaceCover(coverFile)
+                        : userService.uploadCover(coverFile)
+                    : null,
+            ]);
+            const errors: string[] = [];
+
+            if (textResult && !textResult.ok) errors.push(textResult.message);
+            if (textResult?.ok) {
+                updateUser(textResult.user);
+
+                // A cleared occupation/website/birthday never made it into payload,
+                // so the server still holds the old value — snap those three back
+                // to what savedRef had before this save, in both the new baseline
+                // and the visible inputs. Otherwise the box would sit empty while
+                // the real value is unchanged, and the next diff would try (and
+                // fail) to send the same clear again.
+                const nextSaved: EditableFields = { ...current };
+                if (clearedFields.includes('Title')) nextSaved.occupation = savedRef.current.occupation;
+                if (clearedFields.includes('Website')) nextSaved.website = savedRef.current.website;
+                if (clearedFields.includes('Birthday')) nextSaved.birthday = savedRef.current.birthday;
+
+                savedRef.current = nextSaved;
+                setFields(nextSaved);
+                if (clearedFields.includes('Birthday')) {
+                    setBirthdayInput(nextSaved.birthday ? format(nextSaved.birthday, 'dd/MM/yyyy') : '');
+                }
             }
 
-            updateUser(result.user);
-
-            // A cleared occupation/website/birthday never made it into payload,
-            // so the server still holds the old value — snap those three back
-            // to what savedRef had before this save, in both the new baseline
-            // and the visible inputs. Otherwise the box would sit empty while
-            // the real value is unchanged, and the next diff would try (and
-            // fail) to send the same clear again.
-            const nextSaved: EditableFields = { ...fields };
-            if (clearedFields.includes('Title')) nextSaved.occupation = savedRef.current.occupation;
-            if (clearedFields.includes('Website')) nextSaved.website = savedRef.current.website;
-            if (clearedFields.includes('Birthday')) nextSaved.birthday = savedRef.current.birthday;
-
-            savedRef.current = nextSaved;
-            setFields(nextSaved);
-            if (clearedFields.includes('Birthday')) {
-                setBirthdayInput(nextSaved.birthday ? format(nextSaved.birthday, 'dd/MM/yyyy') : '');
+            // A part that failed (size, type, rate limit...) does not undo the others;
+            // a rejected file stays picked so Save can retry it.
+            if (avatarResult?.ok) {
+                setAvatarFile(null);
+                setAvatarPreview(null);
+            } else if (avatarResult) {
+                errors.push(avatarResult.message);
             }
+            if (coverResult?.ok) {
+                setCoverFile(null);
+                setCoverPreview(null);
+            } else if (coverResult) {
+                errors.push(coverResult.message);
+            }
+            if (avatarResult?.ok || coverResult?.ok) await refreshUser();
 
-            if (clearedFields.length > 0) {
+            if (errors.length > 0) {
+                const savedSomething = textResult?.ok || avatarResult?.ok || coverResult?.ok;
+                toast.error(savedSomething ? `Some changes were saved, but: ${errors.join(' ')}` : errors.join(' '), {
+                    id: toastId,
+                });
+            } else if (clearedFields.length > 0) {
                 toast.success(`Profile updated. ${clearedFields.join(', ')} could not be cleared and stayed as-is.`, {
                     id: toastId,
                 });
@@ -433,7 +528,8 @@ export default function Edit() {
                 <Card className="overflow-hidden py-0">
                     <div className="group relative h-28 w-full bg-muted">
                         {(coverPreview ?? user.coverUrl) && (
-                            <Image src={coverPreview ?? user.coverUrl!} alt="" fill className="object-cover" />
+                            // unoptimized: BE-hosted covers are not in images.remotePatterns.
+                            <Image src={coverPreview ?? user.coverUrl!} alt="" fill unoptimized className="object-cover" />
                         )}
                         <label className="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/0 text-[#52514e] dark:text-[#c3c2b7] opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100">
                             <Camera className="size-5" />
@@ -457,7 +553,33 @@ export default function Edit() {
                             </span>
                             <input type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
                         </label>
-                        <p className="mt-2 text-xs text-muted-foreground">Hover the cover or avatar to change it.</p>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                            Hover the cover or avatar to change it. New photos are uploaded when you save.
+                        </p>
+                        {((user.avatarUrl && !avatarFile) || (user.coverUrl && !coverFile)) && (
+                            <div className="mt-2 flex gap-4 text-xs">
+                                {user.avatarUrl && !avatarFile && (
+                                    <button
+                                        type="button"
+                                        disabled={saving}
+                                        onClick={() => handleRemoveImage('avatar')}
+                                        className="cursor-pointer text-muted-foreground underline-offset-2 hover:text-destructive hover:underline disabled:opacity-50"
+                                    >
+                                        Remove avatar
+                                    </button>
+                                )}
+                                {user.coverUrl && !coverFile && (
+                                    <button
+                                        type="button"
+                                        disabled={saving}
+                                        onClick={() => handleRemoveImage('cover')}
+                                        className="cursor-pointer text-muted-foreground underline-offset-2 hover:text-destructive hover:underline disabled:opacity-50"
+                                    >
+                                        Remove cover
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -476,12 +598,26 @@ export default function Edit() {
 
                     <CardContent className="space-y-5">
                         <div className="space-y-2 text-[#52514e] dark:text-[#c3c2b7]">
-                            <div className="flex items-center justify-between">
-                                <Label>Full name</Label>
-                                {/* Handle is read-only here: PATCH /api/users/me has no displayName field. */}
-                                <span className="font-mono text-xs text-muted-foreground">@{user.displayName}</span>
-                            </div>
+                            <Label htmlFor="displayName">Display name</Label>
                             <Input
+                                id="displayName"
+                                value={fields.displayName}
+                                maxLength={DISPLAY_NAME_MAX_LENGTH}
+                                autoComplete="username"
+                                aria-invalid={!!displayNameError}
+                                onChange={(e) => {
+                                    setField('displayName', e.target.value);
+                                    setDisplayNameError('');
+                                }}
+                                placeholder="e.g. fizz"
+                            />
+                            {displayNameError && <p className="text-xs text-destructive">{displayNameError}</p>}
+                        </div>
+
+                        <div className="space-y-2 text-[#52514e] dark:text-[#c3c2b7]">
+                            <Label htmlFor="fullName">Full name</Label>
+                            <Input
+                                id="fullName"
                                 value={fields.fullName}
                                 maxLength={80}
                                 onChange={(e) => setField('fullName', e.target.value)}
@@ -489,8 +625,8 @@ export default function Edit() {
                             />
                         </div>
 
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between text-[#52514e] dark:text-[#c3c2b7]">
+                        <div className="space-y-2 text-[#52514e] dark:text-[#c3c2b7]">
+                            <div className="flex items-center justify-between">
                                 <Label>Bio / headline</Label>
                                 <span className="text-xs text-muted-foreground">
                                     {fields.bio.length}/{BIO_MAX_LENGTH}
