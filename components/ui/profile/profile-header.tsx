@@ -73,6 +73,8 @@ export default function ProfileHeader({ user }: { user: ICurrentUser }) {
                         alt=""
                         fill
                         priority
+                        // BE-hosted files (MinIO) are not in images.remotePatterns, so skip the optimizer.
+                        unoptimized
                         sizes="(max-width: 640px) 100vw, 768px"
                         className="object-cover"
                     />

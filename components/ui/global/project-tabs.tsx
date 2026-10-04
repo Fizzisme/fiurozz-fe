@@ -43,7 +43,8 @@ export default function ProjectTabs({ user }: { user: ICurrentUser }) {
     const nothingToShowYet = !hasPosition && !showEmail;
 
     return (
-        <Card>
+        // bg-sidebar: same surface as the profile header above it (Card's default resolves to bg-card).
+        <Card className="bg-sidebar">
             <CardHeader>
                 <CardTitle className="text-base text-[#52514e] dark:text-[#c3c2b7]">About</CardTitle>
             </CardHeader>
