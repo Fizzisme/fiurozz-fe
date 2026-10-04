@@ -23,6 +23,12 @@ export interface CreateProjectPayload {
     tagIds: string[];
 }
 
+// Files sent next to the JSON part: 3-5 images (required) and at most one video.
+export interface CreateProjectMedia {
+    images: File[];
+    video?: File;
+}
+
 export type ProjectVisibility = 'PUBLIC' | 'UNLISTED' | 'PRIVATE';
 
 // Shape returned by GET /api/projects/tags (data.items[]).
@@ -81,10 +87,20 @@ export const projectService = {
     },
 
     // Creates the project as a draft; it stays private until publishProject.
-    async createProject(payload: CreateProjectPayload): Promise<ApiEnvelope<Project | null>> {
+    // multipart/form-data: append order is display order, images[0] becomes the thumbnail.
+    async createProject(
+        payload: CreateProjectPayload,
+        media: CreateProjectMedia,
+    ): Promise<ApiEnvelope<Project | null>> {
         try {
-            // TODO: real url
-            return await apiClient.post<Project>('/api/projects', payload);
+            const form = new FormData();
+            // Must be a JSON Blob: a plain string part is text/plain and BE answers 415.
+            form.append('project', new Blob([JSON.stringify(payload)], { type: 'application/json' }));
+            media.images.forEach((file) => form.append('images', file));
+            if (media.video) form.append('video', media.video);
+
+            // No Content-Type here: the browser adds it together with the boundary.
+            return await apiClient.post<Project>('/api/projects', form);
         } catch (error) {
             return toFailedEnvelope(error);
         }
@@ -99,11 +115,22 @@ export const projectService = {
         }
     },
 
-    // Publishing is where the author decides who can see the project (agreed with BE).
-    async publishProject(id: string, visibility: ProjectVisibility): Promise<ApiEnvelope<Project | null>> {
+    // DRAFT -> PUBLISHED (ref/PUBLISH_PROJECT_API_CONTRACT.md). BE does optimistic locking with
+    // `If-Match: "<version>"` (quotes required) and answers 412 PROJECT_STALE_VERSION on a mismatch.
+    // Idempotent for the current version, so a retry is safe.
+    // The `{ visibility }` body is NOT in that contract yet (it says "no body"): FE sends it because
+    // the author picks visibility in the toolbar, and BE has to accept it for the choice to apply.
+    async publishProject(
+        id: string,
+        version: number,
+        visibility: ProjectVisibility,
+    ): Promise<ApiEnvelope<Project | null>> {
         try {
-            // TODO: real url, pending BE's answer on the publish endpoint
-            return await apiClient.post<Project>(`/api/projects/${id}/publish`, { visibility });
+            return await apiClient.post<Project>(
+                `/api/projects/${id}/publish`,
+                { visibility },
+                { headers: { 'If-Match': `"${version}"` } },
+            );
         } catch (error) {
             return toFailedEnvelope(error);
         }

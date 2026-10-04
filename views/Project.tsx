@@ -1,6 +1,6 @@
 'use client'
 
-import ImageGallery from '@/components/ui/project/image-gallery';
+import ImageGallery, { getGalleryMedia } from '@/components/ui/project/image-gallery';
 import AuthorCard from '@/components/ui/project/author-card';
 import ProjectTabs from '@/components/ui/project/project-tabs';
 import type {Project} from '@/mock-data/projects';
@@ -14,6 +14,10 @@ import * as React from 'react';
 
 export default function Project({project}:{project: Project}) {
     const router = useRouter();
+    const galleryMedia = getGalleryMedia(project);
+    // BE sends the creator as a nested `owner`; avatarUrl is null until they set one.
+    const owner = (project as { owner?: { displayName: string; avatarUrl: string | null } }).owner;
+    const ownerName = owner?.displayName || 'Unknown owner';
 
 
 
@@ -32,11 +36,15 @@ export default function Project({project}:{project: Project}) {
               </Button>
 
               <header className="mb-8">
-                  <h1 className="text-2xl md:text-3xl font-bold mb-2">{project.title}</h1>
-                  <p className="text-gray-500 text-sm md:text-base">{project.description}</p>
+                  {/* anywhere: a long unbroken string wraps instead of widening the page (same as the preview) */}
+                  <h1 className="text-2xl md:text-3xl font-bold mb-2 [overflow-wrap:anywhere]">{project.title}</h1>
+                  <p className="text-gray-500 text-sm md:text-base [overflow-wrap:anywhere]">{project.description}</p>
               </header>
 
               <ImageGallery
+                  // Keyed so the gallery resets its internal order if the media change.
+                  key={galleryMedia.map((m) => m.url).join('|')}
+                  media={galleryMedia.length > 0 ? galleryMedia : undefined}
                   thumbnail={project.thumbnail}
                   images={project.images}
                   title={project.title}
@@ -44,14 +52,10 @@ export default function Project({project}:{project: Project}) {
 
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
                   <div className="flex">
-                      <AuthorCard
-                          name={project.author.name}
-                          email={project.author.email}
-                          avatar={project.author.avatar}
-                      />
+                      <AuthorCard name={ownerName} avatar={owner?.avatarUrl ?? undefined} />
                       <div className="grid flex-1 text-left text-lg leading-tight ml-2">
-                          <span className="truncate font-semibold">{project.author.name}</span>
-                          <span className="truncate text-xs text-[#6a7282]">{project.author.email}</span>
+                          <span className="truncate font-semibold">{ownerName}</span>
+                          <span className="truncate text-xs text-[#6a7282]">Project owner</span>
                       </div>
                   </div>
                   {/*<ProjectActions demoUrl={project.demoUrl} githubUrl={project.githubUrl} />*/}

@@ -27,6 +27,9 @@ async function proxy(req: NextRequest, path: string[]) {
     const forwardHeaders = new Headers();
     const contentType = req.headers.get('content-type');
     if (contentType) forwardHeaders.set('content-type', contentType);
+    // Optimistic locking (publish, update, delete): BE reads the project version from If-Match.
+    const ifMatch = req.headers.get('if-match');
+    if (ifMatch) forwardHeaders.set('if-match', ifMatch);
 
     // Read the whole request body up-front as raw bytes. This is
     // required (not just convenient) because req.body is a

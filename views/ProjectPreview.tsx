@@ -3,63 +3,40 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Eye } from 'lucide-react';
 
-import ImageGallery from '@/components/ui/project/image-gallery';
+import ImageGallery, { getGalleryMedia } from '@/components/ui/project/image-gallery';
 import AuthorCard from '@/components/ui/project/author-card';
 import ProjectTabs from '@/components/ui/project/project-tabs';
-import { Button } from '@/components/animate-ui/components/buttons/button';
-import { ArrowLeft } from '@/components/animate-ui/icons/arrow-left';
-import { AnimateIcon } from '@/components/animate-ui/icons/icon';
-import { Label } from '@/components/ui/global/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/global/select';
+import PreviewToolbar from '@/components/ui/project/preview-toolbar';
+import { Input } from '@/components/ui/global/input';
+import { Textarea } from '@/components/ui/global/textarea';
 import type { Project } from '@/mock-data/projects';
 import { projectService, type ProjectVisibility } from '@/services/project-service';
-
-const VISIBILITY_OPTIONS: { value: ProjectVisibility; label: string; hint: string }[] = [
-    { value: 'PUBLIC', label: 'Public', hint: 'Anyone can find and open it.' },
-    { value: 'UNLISTED', label: 'Unlisted', hint: 'Only people with the link can open it.' },
-    { value: 'PRIVATE', label: 'Private', hint: 'Only you can see it.' },
-];
+import { DESCRIPTION_MAX, TITLE_MAX } from '@/lib/project-form';
 
 /* -------------------------------------------------------------------------- */
 /*                                    Page                                    */
 /* -------------------------------------------------------------------------- */
 
-// Read-only preview of the author's draft, laid out like views/Project.tsx.
-// Editing returns once BE settles UpdateProjectRequest / ProjectResponse
-// (see the FE <-> BE field report); until then the author reviews and publishes here.
-export default function ProjectPreview({ projectId }: { projectId: string }) {
+// Preview of the author's draft, laid out like views/Project.tsx.
+// Edit mode is UI-only for now: changes stay in local state and Save is not wired to the API
+// until BE settles UpdateProjectRequest / ProjectResponse.
+// The page (server component) fetches the draft and passes it in; `loadError` is set instead
+// of `project` when that fetch failed.
+export default function ProjectPreview({ project, loadError }: { project: Project | null; loadError?: string }) {
     const router = useRouter();
 
-    const [project, setProject] = React.useState<Project | null>(null);
-    const [loadError, setLoadError] = React.useState('');
+    const [isEditing, setIsEditing] = React.useState(false);
+    const [form, setForm] = React.useState({ title: project?.title ?? '', description: project?.description ?? '' });
 
     const [visibility, setVisibility] = React.useState<ProjectVisibility>('PUBLIC');
     const [publishError, setPublishError] = React.useState('');
     const [isPublishing, setIsPublishing] = React.useState(false);
 
-    React.useEffect(() => {
-        let cancelled = false;
-
-        projectService.getProjectById(projectId).then((result) => {
-            if (cancelled) return;
-            if (!result.success || !result.data) {
-                setLoadError(result.message ?? 'Could not load this project');
-                return;
-            }
-            setProject(result.data);
-        });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [projectId]);
-
-    if (loadError) {
+    if (loadError || !project) {
         return (
             <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 text-muted-foreground">
-                <p>{loadError}</p>
+                <p>{loadError ?? 'Could not load this project'}</p>
                 <Link href="/projects" className="text-sm font-medium text-foreground hover:underline">
                     Back to projects
                 </Link>
@@ -67,109 +44,68 @@ export default function ProjectPreview({ projectId }: { projectId: string }) {
         );
     }
 
-    if (!project) {
-        return (
-            <div className="flex min-h-[50vh] items-center justify-center text-muted-foreground">
-                Loading your project…
-            </div>
-        );
-    }
+    const galleryMedia = getGalleryMedia(project);
 
-    const visibilityHint = VISIBILITY_OPTIONS.find((option) => option.value === visibility)?.hint;
+    // BE returns the owner as a nested object; avatarUrl is null until the owner sets one,
+    // and AuthorCard then falls back to initials.
+    const owner = (project as Project & { owner?: { id: string; displayName: string; avatarUrl: string | null } })
+        .owner;
+    const ownerName = owner?.displayName || 'Unknown owner';
+
+    const isDirty = form.title !== project.title || form.description !== project.description;
 
     const handlePublish = async () => {
         setPublishError('');
 
+        // `version` feeds If-Match. The mock Project type has no such field, hence the local shape.
+        const { version } = project as Project & { version?: number };
+        if (version === undefined) {
+            setPublishError('This project has no version yet. Reload the page and try again.');
+            return;
+        }
+
         setIsPublishing(true);
-        const result = await projectService.publishProject(project.id, visibility);
+        const result = await projectService.publishProject(project.id, version, visibility);
         setIsPublishing(false);
 
-        if (!result.success) {
+        if (!result.success || !result.data) {
+            if ((result as { code?: string }).code === 'PROJECT_STALE_VERSION') {
+                // Edited elsewhere: refetch the draft (new version) and let the author decide again.
+                router.refresh();
+                setPublishError('This project changed somewhere else. We reloaded it; press Publish again if it looks right.');
+                return;
+            }
             setPublishError(result.message ?? 'Could not publish the project');
             return;
         }
 
-        const published = result.data ?? project;
-        router.push(`/projects/${published.categorySlug}/${published.subCategorySlug}/${published.slug}`);
+        // Published response uses the nested category / subCategory objects.
+        const published = result.data as Project & { category?: { slug: string }; subCategory?: { slug: string } };
+        router.push(
+            `/projects/${published.category?.slug}/${published.subCategory?.slug}/${published.slug}?id=${published.id}`,
+        );
     };
 
     return (
-        <div className="py-5">
-            <div className="container mx-auto max-w-5xl px-4 lg:px-0">
-                <Button
-                    variant="ghost"
-                    asChild
-                    className="cursor-pointer !px-0 text-[#52514e] dark:text-[#c3c2b7]"
-                    onClick={() => router.back()}
-                >
-                    <AnimateIcon animateOnHover className="flex items-center justify-center gap-1">
-                        <ArrowLeft />
-                        Back
-                    </AnimateIcon>
-                </Button>
+        <div>
+            {/* ============================================================ */}
+            {/* TOOLBAR (full width, pinned to the top)                       */}
+            {/* ============================================================ */}
 
-                {/* ============================================================ */}
-                {/* DRAFT BAR                                                     */}
-                {/* ============================================================ */}
+            <PreviewToolbar
+                title={form.title}
+                isEditing={isEditing}
+                onToggleEdit={() => setIsEditing((prev) => !prev)}
+                canSave={isDirty}
+                // TODO: call the update endpoint once BE settles UpdateProjectRequest.
+                onSave={() => {}}
+                visibility={visibility}
+                onVisibilityChange={setVisibility}
+                onPublish={handlePublish}
+                isPublishing={isPublishing}
+            />
 
-                <div className="mb-6 flex flex-col gap-4 rounded border border-foreground/10 bg-card p-4 md:flex-row md:items-end md:justify-between">
-                    <div className="flex items-start gap-3">
-                        <Eye className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                        <div>
-                            <p className="text-sm font-semibold text-[#52514e] dark:text-[#c3c2b7]">Draft preview</p>
-                            <p className="text-xs text-muted-foreground">
-                                Only you can see this project until you publish it.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                        <div className="space-y-1 text-[#52514e] dark:text-[#c3c2b7]">
-                            <Label htmlFor="preview-visibility" className="text-xs">
-                                Who can see it after publishing
-                            </Label>
-                            <Select
-                                value={visibility}
-                                onValueChange={(value) => setVisibility(value as ProjectVisibility)}
-                                disabled={isPublishing}
-                            >
-                                <SelectTrigger
-                                    id="preview-visibility"
-                                    className="w-full cursor-pointer sm:w-40"
-                                    aria-describedby="preview-visibility-hint"
-                                >
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="w-[var(--radix-select-trigger-width)]">
-                                    {VISIBILITY_OPTIONS.map((option) => (
-                                        <SelectItem
-                                            key={option.value}
-                                            value={option.value}
-                                            className="cursor-pointer text-[#52514e] dark:text-[#c3c2b7]"
-                                        >
-                                            {option.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={isPublishing}
-                            onClick={handlePublish}
-                            className="cursor-pointer"
-                        >
-                            {isPublishing ? 'Publishing…' : 'Publish'}
-                        </Button>
-                    </div>
-                </div>
-
-                <p id="preview-visibility-hint" className="-mt-4 mb-6 text-xs text-muted-foreground md:text-right">
-                    {visibilityHint}
-                </p>
-
+            <div className="container mx-auto max-w-5xl px-4 pt-8 lg:px-0">
                 {publishError && (
                     <p role="alert" className="mb-6 text-sm text-destructive">
                         {publishError}
@@ -181,14 +117,43 @@ export default function ProjectPreview({ projectId }: { projectId: string }) {
                 {/* ============================================================ */}
 
                 <header className="mb-8">
-                    <h1 className="mb-2 text-2xl font-bold md:text-3xl">{project.title}</h1>
-                    <p className="text-sm text-gray-500 md:text-base">{project.description}</p>
+                    {isEditing ? (
+                        <>
+                            <Input
+                                aria-label="Title"
+                                name="title"
+                                autoComplete="off"
+                                maxLength={TITLE_MAX}
+                                value={form.title}
+                                onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+                                placeholder="Project title"
+                                className="mb-2 h-auto text-2xl font-bold md:text-3xl"
+                            />
+                            <Textarea
+                                aria-label="Description"
+                                name="description"
+                                rows={4}
+                                maxLength={DESCRIPTION_MAX}
+                                value={form.description}
+                                onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                                placeholder="Describe your project"
+                                className="text-sm md:text-base"
+                            />
+                        </>
+                    ) : (
+                        <>
+                            {/* anywhere: a long unbroken string wraps instead of widening the page */}
+                            <h1 className="mb-2 text-2xl font-bold [overflow-wrap:anywhere] md:text-3xl">{form.title}</h1>
+                            <p className="text-sm text-gray-500 [overflow-wrap:anywhere] md:text-base">{form.description}</p>
+                        </>
+                    )}
                 </header>
 
-                {project.thumbnail && (
-                    // Keyed so the gallery resets its internal order if the images change.
+                {(galleryMedia.length > 0 || project.thumbnail) && (
+                    // Keyed so the gallery resets its internal order if the media change.
                     <ImageGallery
-                        key={[project.thumbnail, ...(project.images ?? [])].join('|')}
+                        key={galleryMedia.length > 0 ? galleryMedia.map((m) => m.url).join('|') : project.thumbnail}
+                        media={galleryMedia.length > 0 ? galleryMedia : undefined}
                         thumbnail={project.thumbnail}
                         images={project.images}
                         title={project.title}
@@ -197,20 +162,16 @@ export default function ProjectPreview({ projectId }: { projectId: string }) {
 
                 <div className="mb-8 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
                     <div className="flex">
-                        <AuthorCard
-                            name={project.author.name}
-                            email={project.author.email}
-                            avatar={project.author.avatar}
-                        />
+                        <AuthorCard name={ownerName} avatar={owner?.avatarUrl ?? undefined} />
                         <div className="ml-2 grid flex-1 text-left text-lg leading-tight">
-                            <span className="truncate font-semibold">{project.author.name}</span>
-                            <span className="truncate text-xs text-[#6a7282]">{project.author.email}</span>
+                            <span className="truncate font-semibold">{ownerName}</span>
+                            <span className="truncate text-xs text-[#6a7282]">Project owner</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <ProjectTabs project={project} />
+            <ProjectTabs project={project} showComments={false} />
         </div>
     );
 }

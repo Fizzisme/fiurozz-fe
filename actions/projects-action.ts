@@ -1,6 +1,7 @@
 'use server';
 
-import { gatewayClient, ApiError } from '@/services/gateway-client';
+import { cookies } from 'next/headers';
+import { gatewayClient, ApiError, type ApiEnvelope } from '@/services/gateway-client';
 import {
     fetchProjectsCursorPage as fetchMockProjectsCursorPage,
     getProjectBySlug as getMockProjectBySlug,
@@ -16,8 +17,7 @@ export async function getProjectsCursorPageAction(
     params: GetProjectsCursorParams = {},
 ): Promise<ProjectsCursorPage> {
     try {
-        // TODO: real url
-        const envelope = await gatewayClient.get<ProjectsCursorPage>('/projects', {
+        const envelope = await gatewayClient.get<ProjectsCursorPage>('/api/projects', {
             query: {
                 cursor: params.cursor ?? undefined,
                 limit: params.limit,
@@ -55,6 +55,30 @@ export async function getProjectBySlugAction(slug: string): Promise<Project | nu
         return getMockProjectBySlug(slug) ?? null;
     }
 }
+// Reads a project by id on the server. Drafts are private, so the caller's accessToken cookie
+// is forwarded (the browser proxy does the same). Returns the envelope so the page can show BE's message.
+export async function getProjectByIdAction(id: string): Promise<ApiEnvelope<Project | null>> {
+    const accessToken = (await cookies()).get('accessToken')?.value;
+
+    try {
+        return await gatewayClient.get<Project>(`/api/projects/${id}`, {
+            headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+            cache: 'no-store',
+        });
+    } catch (error) {
+        if (error instanceof ApiError && error.payload) {
+            return error.payload as ApiEnvelope<null>;
+        }
+
+        return {
+            success: false,
+            timestamp: new Date().toISOString(),
+            message: 'Cannot connect to server',
+            data: null,
+        };
+    }
+}
+
 // Seed-like data that almost never changes, so keep it out of the per-render path.
 const CATEGORY_REVALIDATE_SECONDS = 3600;
 
