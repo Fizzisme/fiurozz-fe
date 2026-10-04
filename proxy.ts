@@ -1,11 +1,32 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { gatewayClient } from '@/services/gateway-client';
-import { isRefreshInFlight, beginRefresh, endRefresh, waitForRefresh } from '@/lib/refresh-lock';
+import {
+    isRefreshInFlight,
+    beginRefresh,
+    endRefresh,
+    waitForRefresh,
+    type RefreshedTokens,
+    type RefreshTokenResponse,
+} from '@/lib/refresh-lock';
 
-interface RefreshTokenResponse {
-    accessToken: string;
-    accessTokenExpiresIn: number;
-    refreshTokenExpiresIn: number;
+function setAuthCookies(res: NextResponse, tokens: RefreshedTokens) {
+    res.cookies.set('accessToken', tokens.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: tokens.accessTokenExpiresIn ?? 15 * 60,
+    });
+
+    if (tokens.refreshToken) {
+        res.cookies.set('refreshToken', tokens.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/',
+            maxAge: tokens.refreshTokenExpiresIn ?? 7 * 24 * 60 * 60,
+        });
+    }
 }
 
 // Routes that a logged-in user shouldn't be able to revisit -- e.g.
@@ -33,11 +54,13 @@ export async function proxy(req: NextRequest) {
     let refreshedResponse: NextResponse | null = null;
 
     if (!accessToken && refreshToken) {
+        let tokens: RefreshedTokens | null = null;
+
         if (isRefreshInFlight()) {
-            await waitForRefresh();
-            // Re-read after waiting -- another invocation may have
-            // just set it.
-            accessToken = req.cookies.get('accessToken')?.value;
+            // req.cookies is this request's original Cookie header, so
+            // it never sees what the other invocation set -- take the
+            // tokens it hands over instead.
+            tokens = await waitForRefresh();
         } else {
             beginRefresh();
             try {
@@ -48,36 +71,28 @@ export async function proxy(req: NextRequest) {
                 );
 
                 if (response.ok && envelope.success && envelope.data?.accessToken) {
-                    accessToken = envelope.data.accessToken;
-
-                    refreshedResponse = NextResponse.next();
-                    refreshedResponse.cookies.set('accessToken', envelope.data.accessToken, {
-                        httpOnly: true,
-                        secure: process.env.NODE_ENV === 'production',
-                        sameSite: 'lax',
-                        path: '/',
-                        maxAge: envelope.data.accessTokenExpiresIn ?? 15 * 60,
-                    });
-
-                    const setCookieHeader = response.headers.get('set-cookie');
-                    if (setCookieHeader?.startsWith('refreshToken=')) {
-                        const newRefreshToken = setCookieHeader.split(';')[0].split('=')[1];
-                        refreshedResponse.cookies.set('refreshToken', newRefreshToken, {
-                            httpOnly: true,
-                            secure: process.env.NODE_ENV === 'production',
-                            sameSite: 'lax',
-                            path: '/',
-                            maxAge: envelope.data.refreshTokenExpiresIn ?? 7 * 24 * 60 * 60,
-                        });
-                    }
-
-                    endRefresh(true);
-                } else {
-                    endRefresh(false);
+                    // The BE may send several Set-Cookie headers, so
+                    // find the refreshToken one instead of assuming
+                    // it comes first.
+                    const rotated = (response.headers.getSetCookie?.() ?? []).find((c) =>
+                        c.startsWith('refreshToken='),
+                    );
+                    tokens = {
+                        ...envelope.data,
+                        refreshToken: rotated?.split(';')[0].split('=')[1],
+                    };
                 }
             } catch {
-                endRefresh(false);
+                tokens = null;
+            } finally {
+                endRefresh(tokens);
             }
+        }
+
+        if (tokens) {
+            accessToken = tokens.accessToken;
+            refreshedResponse = NextResponse.next();
+            setAuthCookies(refreshedResponse, tokens);
         }
     }
 

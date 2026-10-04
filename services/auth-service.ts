@@ -1,5 +1,5 @@
 import { apiClient, ApiEnvelope, ApiError } from '@/services/client';
-import { loginAction, logoutAction } from '@/actions/auth-action';
+import { loginAction, logoutAction, type ILoginPayload } from '@/actions/auth-action';
 
 interface IRegisterPayload {
     fullName: string;
@@ -9,11 +9,6 @@ interface IRegisterPayload {
     birthday: Date;
     country: string;
     gender: string;
-}
-
-interface ILoginPayload {
-    email: string;
-    password: string;
 }
 
 export const authService = {
