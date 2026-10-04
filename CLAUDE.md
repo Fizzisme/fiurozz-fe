@@ -57,6 +57,10 @@ npx tsc --noEmit -p .   # typecheck (no dedicated script)
 
 **Language.** UI copy is English. Source comments are Vietnamese or English; match the file you are editing.
 
+## Exploring the codebase
+
+A knowledge graph of this repo lives in `graphify-out/`. Before exploring for a new feature or a cross-file question, read `graphify-out/GRAPH_REPORT.md` and try `/graphify query "<question>"` before broad grepping. Treat it as a map, not the truth: it reflects the code at the last scan, so confirm in the real files before editing, and re-run `/graphify` (update) after large changes.
+
 ## Verifying UI work
 
 The dev server is usually already running on `http://localhost:3000`. When taking screenshots, let entrance motion settle first (framer-motion reveals run 0.4–0.9s; `/design` needs a scroll to advance its pinned timeline) — a capture taken too early shows a half-faded page and reads as a bug that isn't there.
