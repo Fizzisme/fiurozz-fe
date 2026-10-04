@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/global/separator';
 
 function DetailRow({ icon: Icon, children }: { icon: typeof Briefcase; children: React.ReactNode }) {
     return (
-        <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-3 text-sm text-[#52514e] dark:text-[#c3c2b7]">
             <Icon className="size-4 shrink-0 text-muted-foreground" />
             <span>{children}</span>
         </div>

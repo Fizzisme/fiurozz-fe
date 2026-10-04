@@ -115,7 +115,11 @@ export default function ProfileHeader({ user }: { user: ICurrentUser }) {
                     <p className="text-sm text-muted-foreground">@{user.displayName}</p>
                 </div>
 
-                {user.bio && <p className="max-w-2xl text-[15px] leading-relaxed">{user.bio}</p>}
+                {user.bio && (
+                    <p className="max-w-2xl text-[15px] leading-relaxed text-[#52514e] dark:text-[#c3c2b7]">
+                        {user.bio}
+                    </p>
+                )}
 
                 {/* Meta row: location / website / birthday / joined */}
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
