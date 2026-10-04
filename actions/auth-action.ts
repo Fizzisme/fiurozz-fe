@@ -6,7 +6,14 @@
 
 import { cookies } from 'next/headers';
 import { ApiEnvelope, ApiError, gatewayClient } from '@/services/gateway-client';
-import { isRefreshInFlight, beginRefresh, endRefresh, waitForRefresh } from '@/lib/refresh-lock';
+import {
+    isRefreshInFlight,
+    beginRefresh,
+    endRefresh,
+    waitForRefresh,
+    type RefreshedTokens,
+    type RefreshTokenResponse,
+} from '@/lib/refresh-lock';
 // gatewayClient hits the Gateway directly with an absolute URL.
 // Using the browser client here (baseUrl '/api/proxy') would throw,
 // since a relative URL has nothing to resolve against on the server.
@@ -18,18 +25,40 @@ interface IRefreshResult {
     success: boolean;
 }
 
-interface RefreshTokenResponse {
-    accessToken: string;
-    accessTokenExpiresIn: number;
-    refreshTokenExpiresIn: number;
+type CookieStore = Awaited<ReturnType<typeof cookies>>;
+
+function setRefreshedCookies(cookieStore: CookieStore, tokens: RefreshedTokens) {
+    // maxAge is in SECONDS (per the Set-Cookie spec) -- make sure
+    // accessTokenExpiresIn from the BE is also in seconds, not ms.
+    cookieStore.set('accessToken', tokens.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: tokens.accessTokenExpiresIn ?? 15 * 60,
+    });
+
+    if (tokens.refreshToken) {
+        cookieStore.set('refreshToken', tokens.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            path: '/',
+            maxAge: tokens.refreshTokenExpiresIn ?? 7 * 24 * 60 * 60,
+        });
+    }
 }
 
 export async function refreshAccessTokenAction(): Promise<IRefreshResult> {
     // Someone else's refresh is already in flight -- piggyback on its
-    // result instead of starting a new one.
+    // result instead of starting a new one. Its cookies were set on
+    // ITS response, so write the handed-over tokens onto ours too.
     if (isRefreshInFlight()) {
-        const success = await waitForRefresh();
-        return { success };
+        const tokens = await waitForRefresh();
+        if (!tokens) return { success: false };
+
+        setRefreshedCookies(await cookies(), tokens);
+        return { success: true };
     }
 
     beginRefresh();
@@ -41,7 +70,7 @@ export async function refreshAccessTokenAction(): Promise<IRefreshResult> {
         // No refresh token at all -- user was never logged in, or the
         // cookie already expired/was cleared. Nothing to do.
         if (!refreshToken) {
-            endRefresh(false);
+            endRefresh(null);
             return { success: false };
         }
 
@@ -59,20 +88,9 @@ export async function refreshAccessTokenAction(): Promise<IRefreshResult> {
         );
 
         if (!envelope.success || !envelope.data?.accessToken) {
-            endRefresh(false);
+            endRefresh(null);
             return { success: false };
         }
-
-        // Store the new access token as an httpOnly cookie. maxAge
-        // is in SECONDS (per the Set-Cookie spec) -- make sure
-        // accessTokenExpiresIn from the BE is also in seconds, not ms.
-        cookieStore.set('accessToken', envelope.data.accessToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            path: '/',
-            maxAge: envelope?.data?.accessTokenExpiresIn ?? 15 * 60,
-        });
 
         // The BE rotates the refresh token on every use (security best
         // practice -- limits the damage if a refresh token is ever
@@ -81,25 +99,20 @@ export async function refreshAccessTokenAction(): Promise<IRefreshResult> {
         const setCookies = response.headers.getSetCookie?.() ?? [];
         const rotated = setCookies.find((c) => c.startsWith('refreshToken='));
 
-        if (rotated) {
-            const newRefreshToken = rotated.split(';')[0].split('=')[1];
-            cookieStore.set('refreshToken', newRefreshToken, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: 'lax',
-                path: '/',
-                maxAge: envelope?.data?.refreshTokenExpiresIn ?? 7 * 24 * 60 * 60,
-            });
-        }
+        const tokens: RefreshedTokens = {
+            ...envelope.data,
+            refreshToken: rotated?.split(';')[0].split('=')[1],
+        };
+        setRefreshedCookies(cookieStore, tokens);
 
-        endRefresh(true);
+        endRefresh(tokens);
         return { success: true };
     } catch (error) {
         // Network failure, Gateway down, etc. Treat as a failed
         // refresh rather than letting the error bubble up -- callers
         // (the proxy route) just need a success/fail signal.
         console.error('Refresh token failed:', error);
-        endRefresh(false);
+        endRefresh(null);
         return { success: false };
     }
 }
@@ -109,12 +122,6 @@ export interface ILoginPayload {
     password: string;
 }
 
-interface LoginResponse {
-    accessToken: string;
-    accessTokenExpiresIn: number;
-    refreshTokenExpiresIn: number;
-}
-
 export async function loginAction(payload: ILoginPayload): Promise<ApiEnvelope<null>> {
     try {
         const cookieStore = await cookies();
@@ -122,7 +129,7 @@ export async function loginAction(payload: ILoginPayload): Promise<ApiEnvelope<n
         // Same pattern as refresh: need response.headers to read the
         // rotated refreshToken from Set-Cookie, so postWithResponse
         // instead of the plain post.
-        const { response, data: envelope } = await gatewayClient.postWithResponse<LoginResponse>(
+        const { response, data: envelope } = await gatewayClient.postWithResponse<RefreshTokenResponse>(
             '/api/auth/login',
             payload,
         );
